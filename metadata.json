@@ -1,0 +1,6 @@
+{
+  "name": "Markdown Formatter",
+  "description": "Format raw text and AI outputs instantly with elegant Markdown styling, code syntax highlighting, custom reading themes, and seamless external share/open integration.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
