@@ -433,7 +433,9 @@ private fun RenderTaskList(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(vertical = 3.dp),
+                    .clip(RoundedCornerShape(6.dp))
+                    .clickable { onToggle(item.lineIndex, !item.isChecked) }
+                    .padding(horizontal = 4.dp, vertical = 3.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {

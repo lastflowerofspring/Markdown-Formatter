@@ -154,6 +154,24 @@ fun formatDocument(rawInput: String): FormattedDocument {
         }
     }
 
+    fun sanitizeText() {
+        val sanitized = com.example.util.MarkdownSanitizer.sanitizeAndStandardize(_rawText.value)
+        updateRawText(sanitized)
+    }
+
+    fun formatAllTables() {
+        val formatted = com.example.util.MarkdownTableFormatter.formatAllTables(_rawText.value)
+        updateRawText(formatted)
+    }
+
+    fun replaceAll(findText: String, replaceWith: String, ignoreCase: Boolean = true) {
+        if (findText.isEmpty()) return
+        val current = _rawText.value
+        val regex = Regex(Regex.escape(findText), if (ignoreCase) setOf(RegexOption.IGNORE_CASE) else emptySet())
+        val updated = current.replace(regex, replaceWith)
+        updateRawText(updated)
+    }
+
     fun toggleTaskItem(lineIndex: Int, isChecked: Boolean) {
         val lines = _rawText.value.lines().toMutableList()
         if (lineIndex in lines.indices) {

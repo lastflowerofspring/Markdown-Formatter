@@ -15,6 +15,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Code
 import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.FormatListNumbered
 import androidx.compose.material.icons.filled.WrapText
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -102,6 +103,21 @@ fun CodeBlockView(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
+                    // Line numbers toggle
+                    IconButton(
+                        onClick = { showLineNumbers = !showLineNumbers },
+                        modifier = Modifier
+                            .size(32.dp)
+                            .testTag("toggle_line_numbers_button")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.FormatListNumbered,
+                            contentDescription = if (showLineNumbers) "Hide line numbers" else "Show line numbers",
+                            tint = if (showLineNumbers) themeColors.primary else themeColors.onSurfaceVariant.copy(alpha = 0.6f),
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+
                     // Line wrap toggle
                     IconButton(
                         onClick = { isWrapped = !isWrapped },
@@ -112,7 +128,7 @@ fun CodeBlockView(
                         Icon(
                             imageVector = Icons.Default.WrapText,
                             contentDescription = if (isWrapped) "Horizontal scroll" else "Wrap lines",
-                            tint = if (isWrapped) themeColors.primary else themeColors.onSurfaceVariant,
+                            tint = if (isWrapped) themeColors.primary else themeColors.onSurfaceVariant.copy(alpha = 0.6f),
                             modifier = Modifier.size(16.dp)
                         )
                     }

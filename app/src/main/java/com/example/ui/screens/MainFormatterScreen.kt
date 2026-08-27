@@ -34,8 +34,11 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.model.*
+import com.example.ui.components.FindAndReplaceBar
 import com.example.ui.components.MarkdownRenderer
 import com.example.ui.sheets.*
 import com.example.viewmodel.FormatterViewModel
@@ -70,6 +73,21 @@ fun MainFormatterScreen(
     }
 
     val lazyListState = rememberLazyListState()
+
+    // Editor Text Field State with Selection
+    var editorTextFieldValue by remember { mutableStateOf(TextFieldValue(rawText)) }
+
+    // Sync from ViewModel rawText changes (e.g. file loaded, samples picked, task item toggled)
+    LaunchedEffect(rawText) {
+        if (rawText != editorTextFieldValue.text) {
+            val prevSel = editorTextFieldValue.selection
+            val newSel = TextRange(
+                prevSel.start.coerceIn(0, rawText.length),
+                prevSel.end.coerceIn(0, rawText.length)
+            )
+            editorTextFieldValue = TextFieldValue(text = rawText, selection = newSel)
+        }
+    }
 
     // Sheet states
     var showThemeSheet by remember { mutableStateOf(false) }
@@ -107,7 +125,42 @@ fun MainFormatterScreen(
                     headingCount = formattedDoc.headings.size,
                     fileName = loadedFileName,
                     searchActive = showSearchOverlay,
-                    onViewModeChange = { viewModel.setViewMode(it) },
+                    onViewModeChange = { newMode ->
+                        if (viewMode == ViewMode.FORMATTED && newMode == ViewMode.RAW_EDITOR) {
+                            // Find line index corresponding to current top visible item in reader
+                            val visibleItemIndex = lazyListState.firstVisibleItemIndex
+                            val block = formattedDoc.blocks.getOrNull(visibleItemIndex)
+                            if (block != null) {
+                                val lines = rawText.lines()
+                                val targetLine = block.lineStart.coerceIn(0, (lines.size - 1).coerceAtLeast(0))
+                                val charOffset = lines.take(targetLine).sumOf { it.length + 1 }
+                                editorTextFieldValue = editorTextFieldValue.copy(
+                                    selection = TextRange(charOffset.coerceIn(0, rawText.length))
+                                )
+                            }
+                        } else if (viewMode == ViewMode.RAW_EDITOR && newMode == ViewMode.FORMATTED) {
+                            // Find formatted block corresponding to current editor cursor offset
+                            val cursorOffset = editorTextFieldValue.selection.start
+                            val lines = rawText.lines()
+                            var accumulated = 0
+                            var cursorLine = 0
+                            for ((idx, line) in lines.withIndex()) {
+                                val lineEnd = accumulated + line.length + 1
+                                if (cursorOffset <= lineEnd) {
+                                    cursorLine = idx
+                                    break
+                                }
+                                accumulated = lineEnd
+                            }
+                            val blockIndex = formattedDoc.blocks.indexOfFirst { cursorLine in it.lineStart..it.lineEnd }
+                            if (blockIndex >= 0) {
+                                coroutineScope.launch {
+                                    lazyListState.scrollToItem(blockIndex)
+                                }
+                            }
+                        }
+                        viewModel.setViewMode(newMode)
+                    },
                     onToggleSearch = {
                         showSearchOverlay = !showSearchOverlay
                         if (!showSearchOverlay) viewModel.setSearchQuery("")
@@ -201,10 +254,13 @@ fun MainFormatterScreen(
 
                 ViewMode.RAW_EDITOR -> {
                     RawEditorView(
-                        rawText = rawText,
+                        textFieldValue = editorTextFieldValue,
                         themeColors = themeColors,
                         fontSize = fontSize,
-                        onTextChange = { viewModel.updateRawText(it) },
+                        onTextFieldValueChange = {
+                            editorTextFieldValue = it
+                            viewModel.updateRawText(it.text)
+                        },
                         onPaste = {
                             val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                             val item = clipboard.primaryClip?.getItemAt(0)?.text?.toString()
@@ -218,7 +274,10 @@ fun MainFormatterScreen(
                         onClear = { viewModel.clearText() },
                         onOpenSamples = { showSamplesSheet = true },
                         onOpenFile = { filePickerLauncher.launch("*/*") },
-                        onFormatNow = { viewModel.setViewMode(ViewMode.FORMATTED) }
+                        onFormatNow = { viewModel.setViewMode(ViewMode.FORMATTED) },
+                        onSanitize = { viewModel.sanitizeText() },
+                        onFormatTables = { viewModel.formatAllTables() },
+                        onReplaceAll = { find, rep, ic -> viewModel.replaceAll(find, rep, ic) }
                     )
                 }
 
@@ -232,11 +291,14 @@ fun MainFormatterScreen(
                                 .background(themeColors.surfaceVariant.copy(alpha = 0.3f))
                         ) {
                             RawEditorView(
-                                rawText = rawText,
+                                textFieldValue = editorTextFieldValue,
                                 themeColors = themeColors,
                                 fontSize = fontSize,
                                 isCompact = true,
-                                onTextChange = { viewModel.updateRawText(it) },
+                                onTextFieldValueChange = {
+                                    editorTextFieldValue = it
+                                    viewModel.updateRawText(it.text)
+                                },
                                 onPaste = {
                                     val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                                     val item = clipboard.primaryClip?.getItemAt(0)?.text?.toString()
@@ -245,7 +307,10 @@ fun MainFormatterScreen(
                                 onClear = { viewModel.clearText() },
                                 onOpenSamples = { showSamplesSheet = true },
                                 onOpenFile = { filePickerLauncher.launch("*/*") },
-                                onFormatNow = { viewModel.setViewMode(ViewMode.FORMATTED) }
+                                onFormatNow = { viewModel.setViewMode(ViewMode.FORMATTED) },
+                                onSanitize = { viewModel.sanitizeText() },
+                                onFormatTables = { viewModel.formatAllTables() },
+                                onReplaceAll = { find, rep, ic -> viewModel.replaceAll(find, rep, ic) }
                             )
                         }
 
@@ -780,17 +845,83 @@ private fun ReaderBottomMetricsBar(
 
 @Composable
 private fun RawEditorView(
-    rawText: String,
+    textFieldValue: TextFieldValue,
     themeColors: ReaderThemeColors,
     fontSize: FontSizePreference,
-    onTextChange: (String) -> Unit,
+    onTextFieldValueChange: (TextFieldValue) -> Unit,
     onPaste: () -> Unit,
     onClear: () -> Unit,
     onOpenSamples: () -> Unit,
     onOpenFile: () -> Unit,
     onFormatNow: () -> Unit,
+    onSanitize: () -> Unit,
+    onFormatTables: () -> Unit,
+    onReplaceAll: (String, String, Boolean) -> Unit,
     isCompact: Boolean = false
 ) {
+    val context = LocalContext.current
+    var showFindReplace by remember { mutableStateOf(false) }
+    var findQuery by remember { mutableStateOf("") }
+    var replaceQuery by remember { mutableStateOf("") }
+    var ignoreCase by remember { mutableStateOf(true) }
+    var currentMatchIndex by remember { mutableStateOf(0) }
+
+    val rawText = textFieldValue.text
+
+    // Compute matches
+    val matchRanges = remember(rawText, findQuery, ignoreCase) {
+        if (findQuery.isEmpty()) {
+            emptyList()
+        } else {
+            val regex = Regex(Regex.escape(findQuery), if (ignoreCase) setOf(RegexOption.IGNORE_CASE) else emptySet())
+            regex.findAll(rawText).map { it.range }.toList()
+        }
+    }
+
+    LaunchedEffect(matchRanges.size) {
+        if (currentMatchIndex >= matchRanges.size) {
+            currentMatchIndex = 0
+        }
+    }
+
+    fun applyFormattingToSelection(prefix: String, suffix: String) {
+        val selection = textFieldValue.selection
+        val start = selection.min
+        val end = selection.max
+
+        val newText: String
+        val newSelection: TextRange
+
+        if (start != end) {
+            val selectedText = rawText.substring(start, end)
+            newText = rawText.substring(0, start) + prefix + selectedText + suffix + rawText.substring(end)
+            newSelection = TextRange(start + prefix.length, end + prefix.length)
+        } else {
+            // No selection: insert at cursor
+            newText = rawText.substring(0, start) + prefix + suffix + rawText.substring(start)
+            newSelection = TextRange(start + prefix.length)
+        }
+
+        onTextFieldValueChange(
+            textFieldValue.copy(
+                text = newText,
+                selection = newSelection
+            )
+        )
+    }
+
+    fun navigateToMatch(index: Int) {
+        if (index in matchRanges.indices) {
+            currentMatchIndex = index
+            val range = matchRanges[index]
+            onTextFieldValueChange(
+                textFieldValue.copy(
+                    selection = TextRange(range.first, range.last + 1)
+                )
+            )
+        }
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -837,6 +968,19 @@ private fun RawEditorView(
             }
 
             Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                // Find & Replace Toggle
+                IconButton(
+                    onClick = { showFindReplace = !showFindReplace },
+                    modifier = Modifier.size(32.dp).testTag("editor_toggle_find_replace")
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.FindReplace,
+                        contentDescription = "Find & Replace",
+                        tint = if (showFindReplace) themeColors.primary else themeColors.onSurfaceVariant,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+
                 if (rawText.isNotBlank()) {
                     IconButton(onClick = onClear, modifier = Modifier.size(32.dp).testTag("editor_clear_btn")) {
                         Icon(Icons.Default.DeleteOutline, contentDescription = "Clear", tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(18.dp))
@@ -855,48 +999,166 @@ private fun RawEditorView(
             }
         }
 
-        // Markdown Syntax Quick Insert Chips
+        // Find & Replace Expandable Panel
+        AnimatedVisibility(
+            visible = showFindReplace,
+            enter = expandVertically() + fadeIn(),
+            exit = shrinkVertically() + fadeOut()
+        ) {
+            FindAndReplaceBar(
+                themeColors = themeColors,
+                findQuery = findQuery,
+                replaceQuery = replaceQuery,
+                matchCount = matchRanges.size,
+                currentMatchIndex = currentMatchIndex,
+                ignoreCase = ignoreCase,
+                onFindQueryChange = {
+                    findQuery = it
+                    currentMatchIndex = 0
+                },
+                onReplaceQueryChange = { replaceQuery = it },
+                onToggleIgnoreCase = { ignoreCase = !ignoreCase },
+                onNextMatch = {
+                    if (matchRanges.isNotEmpty()) {
+                        val nextIdx = (currentMatchIndex + 1) % matchRanges.size
+                        navigateToMatch(nextIdx)
+                    }
+                },
+                onPrevMatch = {
+                    if (matchRanges.isNotEmpty()) {
+                        val prevIdx = if (currentMatchIndex - 1 < 0) matchRanges.size - 1 else currentMatchIndex - 1
+                        navigateToMatch(prevIdx)
+                    }
+                },
+                onReplaceSingle = {
+                    if (matchRanges.isNotEmpty() && currentMatchIndex in matchRanges.indices) {
+                        val range = matchRanges[currentMatchIndex]
+                        val updated = rawText.substring(0, range.first) + replaceQuery + rawText.substring(range.last + 1)
+                        onTextFieldValueChange(
+                            TextFieldValue(
+                                text = updated,
+                                selection = TextRange(range.first + replaceQuery.length)
+                            )
+                        )
+                        Toast.makeText(context, "Replaced 1 match", Toast.LENGTH_SHORT).show()
+                    }
+                },
+                onReplaceAll = {
+                    if (findQuery.isNotEmpty()) {
+                        onReplaceAll(findQuery, replaceQuery, ignoreCase)
+                        Toast.makeText(context, "Replaced all matches", Toast.LENGTH_SHORT).show()
+                    }
+                },
+                onClose = { showFindReplace = false },
+                modifier = Modifier.padding(bottom = 8.dp)
+            )
+        }
+
+        // Markdown Syntax & Auto-Fix Tool Bar
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(bottom = 6.dp),
-            horizontalArrangement = Arrangement.spacedBy(6.dp)
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            val helpers = listOf(
-                "#" to "# ",
-                "##" to "## ",
-                "**B**" to "**bold**",
-                "*I*" to "*italic*",
-                "`code`" to "`code`",
-                "```" to "```kotlin\n\n```",
-                "Quote" to "> [!NOTE]\n> ",
-                "Table" to "\n| Header 1 | Header 2 |\n| :--- | :--- |\n| Value 1 | Value 2 |\n",
-                "Task" to "- [ ] "
-            )
+            // Syntax Chips
+            Row(
+                modifier = Modifier.weight(1f),
+                horizontalArrangement = Arrangement.spacedBy(5.dp)
+            ) {
+                val helpers = listOf(
+                    "#" to ("# " to ""),
+                    "##" to ("## " to ""),
+                    "**B**" to ("**" to "**"),
+                    "*I*" to ("*" to "*"),
+                    "`code`" to ("`" to "`"),
+                    "~~S~~" to ("~~" to "~~"),
+                    "Link" to ("[" to "](url)"),
+                    "```" to ("```kotlin\n" to "\n```"),
+                    "Quote" to ("> " to ""),
+                    "Table" to ("\n| Header 1 | Header 2 |\n| :--- | :--- |\n| Value 1 | Value 2 |\n" to ""),
+                    "Task" to ("- [ ] " to "")
+                )
 
-            helpers.take(if (isCompact) 5 else 8).forEach { (label, insertTemplate) ->
+                helpers.take(if (isCompact) 5 else 8).forEach { (label, formatting) ->
+                    Surface(
+                        shape = RoundedCornerShape(6.dp),
+                        color = themeColors.surfaceVariant.copy(alpha = 0.7f),
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(6.dp))
+                            .clickable {
+                                applyFormattingToSelection(formatting.first, formatting.second)
+                            }
+                    ) {
+                        Text(
+                            text = label,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = themeColors.onSurfaceVariant,
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp)
+                        )
+                    }
+                }
+            }
+
+            // Smart Auto-Fix Buttons
+            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                // Table Column Auto-Padding Formatter
                 Surface(
                     shape = RoundedCornerShape(6.dp),
-                    color = themeColors.surfaceVariant.copy(alpha = 0.7f),
+                    color = themeColors.secondary.copy(alpha = 0.15f),
                     modifier = Modifier
                         .clip(RoundedCornerShape(6.dp))
                         .clickable {
-                            val newText = if (rawText.isEmpty()) insertTemplate else "$rawText\n$insertTemplate"
-                            onTextChange(newText)
+                            onFormatTables()
+                            Toast.makeText(context, "ASCII Table columns aligned", Toast.LENGTH_SHORT).show()
                         }
                 ) {
-                    Text(
-                        text = label,
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = themeColors.onSurfaceVariant,
-                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp)
-                    )
+                    Row(
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(3.dp)
+                    ) {
+                        Icon(Icons.Default.TableChart, contentDescription = null, tint = themeColors.secondary, modifier = Modifier.size(12.dp))
+                        Text(
+                            text = "Align Tables",
+                            fontSize = 10.5.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = themeColors.secondary
+                        )
+                    }
+                }
+
+                // AI / Web Paste Sanitizer
+                Surface(
+                    shape = RoundedCornerShape(6.dp),
+                    color = themeColors.primary.copy(alpha = 0.15f),
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(6.dp))
+                        .clickable {
+                            onSanitize()
+                            Toast.makeText(context, "Sanitized entities & repaired delimiters", Toast.LENGTH_SHORT).show()
+                        }
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(3.dp)
+                    ) {
+                        Icon(Icons.Default.AutoFixHigh, contentDescription = null, tint = themeColors.primary, modifier = Modifier.size(12.dp))
+                        Text(
+                            text = "Auto-Fix",
+                            fontSize = 10.5.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = themeColors.primary
+                        )
+                    }
                 }
             }
         }
 
-        // Text Area
+        // Text Area with selection toolbar support
         Surface(
             modifier = Modifier
                 .fillMaxWidth()
@@ -906,8 +1168,8 @@ private fun RawEditorView(
             color = themeColors.surface
         ) {
             BasicTextField(
-                value = rawText,
-                onValueChange = onTextChange,
+                value = textFieldValue,
+                onValueChange = onTextFieldValueChange,
                 textStyle = TextStyle(
                     color = themeColors.onSurface,
                     fontSize = fontSize.bodySp.sp,
