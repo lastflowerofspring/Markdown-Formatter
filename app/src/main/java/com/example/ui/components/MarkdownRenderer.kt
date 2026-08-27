@@ -118,8 +118,11 @@ fun MarkdownRenderer(
             val blockModifier = if (isInteractiveMode && block !is MarkdownBlock.DividerBlock && block !is MarkdownBlock.TableBlock) {
                 Modifier
                     .fillMaxWidth()
-                    .clip(RoundedCornerShape(6.dp))
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(themeColors.primary.copy(alpha = 0.035f))
+                    .border(0.8.dp, themeColors.primary.copy(alpha = 0.25f), RoundedCornerShape(8.dp))
                     .clickable { onEditBlock?.invoke(block) }
+                    .padding(horizontal = 10.dp, vertical = 6.dp)
             } else {
                 Modifier.fillMaxWidth()
             }
@@ -143,6 +146,7 @@ fun MarkdownRenderer(
                             lineSpacing = lineSpacing,
                             fontFamily = fontFamily,
                             searchQuery = searchQuery,
+                            onSpanClick = if (isInteractiveMode) { { onEditBlock?.invoke(block) } } else null,
                             modifier = Modifier.fillMaxWidth()
                         )
                     }
@@ -165,7 +169,8 @@ fun MarkdownRenderer(
                             fontSize = fontSize,
                             lineSpacing = lineSpacing,
                             fontFamily = fontFamily,
-                            searchQuery = searchQuery
+                            searchQuery = searchQuery,
+                            onSpanClick = if (isInteractiveMode) { { onEditBlock?.invoke(block) } } else null
                         )
                     }
 
@@ -176,7 +181,8 @@ fun MarkdownRenderer(
                             fontSize = fontSize,
                             lineSpacing = lineSpacing,
                             fontFamily = fontFamily,
-                            searchQuery = searchQuery
+                            searchQuery = searchQuery,
+                            onSpanClick = if (isInteractiveMode) { { onEditBlock?.invoke(block) } } else null
                         )
                     }
 
@@ -187,7 +193,8 @@ fun MarkdownRenderer(
                             fontSize = fontSize,
                             lineSpacing = lineSpacing,
                             fontFamily = fontFamily,
-                            searchQuery = searchQuery
+                            searchQuery = searchQuery,
+                            onSpanClick = if (isInteractiveMode) { { onEditBlock?.invoke(block) } } else null
                         )
                     }
 
@@ -201,7 +208,8 @@ fun MarkdownRenderer(
                             searchQuery = searchQuery,
                             onToggle = { lineIdx, isChecked ->
                                 onToggleTask?.invoke(lineIdx, isChecked)
-                            }
+                            },
+                            onSpanClick = if (isInteractiveMode) { { onEditBlock?.invoke(block) } } else null
                         )
                     }
 
@@ -314,7 +322,8 @@ private fun RenderBulletList(
     fontSize: FontSizePreference,
     lineSpacing: LineSpacingPreference,
     fontFamily: FontFamilyPreference,
-    searchQuery: String
+    searchQuery: String,
+    onSpanClick: (() -> Unit)? = null
 ) {
     Column(
         modifier = Modifier.fillMaxWidth(),
@@ -349,6 +358,7 @@ private fun RenderBulletList(
                     lineSpacing = lineSpacing,
                     fontFamily = fontFamily,
                     searchQuery = searchQuery,
+                    onSpanClick = onSpanClick,
                     modifier = Modifier.weight(1f)
                 )
             }
@@ -363,7 +373,8 @@ private fun RenderNumberedList(
     fontSize: FontSizePreference,
     lineSpacing: LineSpacingPreference,
     fontFamily: FontFamilyPreference,
-    searchQuery: String
+    searchQuery: String,
+    onSpanClick: (() -> Unit)? = null
 ) {
     Column(
         modifier = Modifier.fillMaxWidth(),
@@ -394,6 +405,7 @@ private fun RenderNumberedList(
                     lineSpacing = lineSpacing,
                     fontFamily = fontFamily,
                     searchQuery = searchQuery,
+                    onSpanClick = onSpanClick,
                     modifier = Modifier.weight(1f)
                 )
             }
@@ -409,7 +421,8 @@ private fun RenderTaskList(
     lineSpacing: LineSpacingPreference,
     fontFamily: FontFamilyPreference,
     searchQuery: String,
-    onToggle: (Int, Boolean) -> Unit
+    onToggle: (Int, Boolean) -> Unit,
+    onSpanClick: (() -> Unit)? = null
 ) {
     Column(
         modifier = Modifier.fillMaxWidth(),
@@ -419,17 +432,21 @@ private fun RenderTaskList(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clickable { onToggle(item.lineIndex, !item.isChecked) }
                     .padding(vertical = 3.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Icon(
-                    imageVector = if (item.isChecked) Icons.Default.CheckBox else Icons.Default.CheckBoxOutlineBlank,
-                    contentDescription = if (item.isChecked) "Completed" else "Not completed",
-                    tint = if (item.isChecked) themeColors.secondary else themeColors.onSurfaceVariant,
-                    modifier = Modifier.size(20.dp)
-                )
+                IconButton(
+                    onClick = { onToggle(item.lineIndex, !item.isChecked) },
+                    modifier = Modifier.size(28.dp)
+                ) {
+                    Icon(
+                        imageVector = if (item.isChecked) Icons.Default.CheckBox else Icons.Default.CheckBoxOutlineBlank,
+                        contentDescription = if (item.isChecked) "Completed" else "Not completed",
+                        tint = if (item.isChecked) themeColors.secondary else themeColors.onSurfaceVariant,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
 
                 RenderInlineSpans(
                     spanGroup = item.content,
@@ -438,6 +455,7 @@ private fun RenderTaskList(
                     lineSpacing = lineSpacing,
                     fontFamily = fontFamily,
                     searchQuery = searchQuery,
+                    onSpanClick = onSpanClick,
                     modifier = Modifier.weight(1f)
                 )
             }

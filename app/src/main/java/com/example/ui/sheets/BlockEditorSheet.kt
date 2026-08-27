@@ -41,18 +41,21 @@ fun BlockEditorSheet(
     onSaveBlockText: (String) -> Unit,
     onDismiss: () -> Unit
 ) {
-    val initialText = remember(block) {
+    val initialText = remember {
         when (block) {
             is MarkdownBlock.HeaderBlock -> block.text
             is MarkdownBlock.ParagraphBlock -> block.content.rawText
             is MarkdownBlock.CodeBlock -> block.code
             is MarkdownBlock.CalloutBlock -> block.content.rawText
             is MarkdownBlock.MathBlock -> block.latex
+            is MarkdownBlock.BulletListBlock -> block.items.joinToString("\n") { "${"  ".repeat(it.level)}* ${it.content.rawText}" }
+            is MarkdownBlock.NumberedListBlock -> block.items.joinToString("\n") { "${"  ".repeat(it.level)}${it.number}. ${it.content.rawText}" }
+            is MarkdownBlock.TaskListBlock -> block.items.joinToString("\n") { "* ${if (it.isChecked) "[x]" else "[ ]"} ${it.content.rawText}" }
             else -> ""
         }
     }
 
-    var textFieldValue by remember(initialText) {
+    var textFieldValue by remember {
         mutableStateOf(TextFieldValue(initialText, TextRange(initialText.length)))
     }
 
@@ -67,18 +70,6 @@ fun BlockEditorSheet(
         } catch (_: Exception) {
             // Ignore focus exception during composition/teardown
         }
-    }
-
-    val blockTypeLabel = when (block) {
-        is MarkdownBlock.HeaderBlock -> "Heading ${block.level}"
-        is MarkdownBlock.ParagraphBlock -> "Paragraph"
-        is MarkdownBlock.CodeBlock -> "Code (${block.language.ifEmpty { "plain" }})"
-        is MarkdownBlock.CalloutBlock -> "Callout (${block.type.name})"
-        is MarkdownBlock.MathBlock -> "Math Formula"
-        is MarkdownBlock.BulletListBlock -> "List Item"
-        is MarkdownBlock.NumberedListBlock -> "Numbered Item"
-        is MarkdownBlock.TaskListBlock -> "Task Item"
-        else -> "Block"
     }
 
     fun commitChanges(newText: String) {
@@ -99,9 +90,30 @@ fun BlockEditorSheet(
             is MarkdownBlock.MathBlock -> {
                 "$$\n$newText\n$$"
             }
+            is MarkdownBlock.BulletListBlock,
+            is MarkdownBlock.NumberedListBlock,
+            is MarkdownBlock.TaskListBlock -> newText
             else -> newText
         }
         onSaveBlockText(finalMarkdown)
+    }
+
+    val blockTypeLabel = when (block) {
+        is MarkdownBlock.HeaderBlock -> "Heading ${block.level}"
+        is MarkdownBlock.ParagraphBlock -> "Paragraph"
+        is MarkdownBlock.CodeBlock -> "Code (${block.language.ifEmpty { "plain" }})"
+        is MarkdownBlock.CalloutBlock -> "Callout (${block.type.name})"
+        is MarkdownBlock.MathBlock -> "Math Formula"
+        is MarkdownBlock.BulletListBlock -> "List Item"
+        is MarkdownBlock.NumberedListBlock -> "Numbered Item"
+        is MarkdownBlock.TaskListBlock -> "Task Item"
+        else -> "Block"
+    }
+
+    // Debounced background sync while typing without interrupting IME composition
+    LaunchedEffect(textFieldValue.text) {
+        kotlinx.coroutines.delay(800)
+        commitChanges(textFieldValue.text)
     }
 
     fun handleDismiss() {
@@ -182,7 +194,6 @@ fun BlockEditorSheet(
                     value = textFieldValue,
                     onValueChange = {
                         textFieldValue = it
-                        commitChanges(it.text)
                     },
                     textStyle = TextStyle(
                         color = themeColors.onSurface,

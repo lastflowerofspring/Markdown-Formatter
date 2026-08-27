@@ -11,7 +11,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.ClickableText
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
+import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
@@ -37,7 +37,8 @@ fun RenderInlineSpans(
     isHeader: Boolean = false,
     textAlign: TextAlign = TextAlign.Start,
     overrideColor: Color? = null,
-    searchQuery: String = ""
+    searchQuery: String = "",
+    onSpanClick: (() -> Unit)? = null
 ) {
     val context = LocalContext.current
 
@@ -140,25 +141,66 @@ fun RenderInlineSpans(
     }
 
     val lineHeightSp = (fontSize.bodySp * lineSpacing.multiplier).sp
+    val hasUrls = remember(spanGroup) {
+        spanGroup.spans.any { it is InlineSpan.Link }
+    }
 
-    ClickableText(
-        text = annotatedString,
-        modifier = modifier,
-        style = TextStyle(
-            lineHeight = lineHeightSp,
-            textAlign = textAlign
-        ),
-        onClick = { offset ->
-            annotatedString.getStringAnnotations(tag = "URL", start = offset, end = offset).firstOrNull()?.let { annotation ->
-                val url = annotation.item
-                try {
-                    val uri = if (!url.startsWith("http://") && !url.startsWith("https://")) "https://$url" else url
-                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(uri))
-                    context.startActivity(intent)
-                } catch (e: Exception) {
-                    Toast.makeText(context, "Could not open link: $url", Toast.LENGTH_SHORT).show()
+    if (onSpanClick != null) {
+        // In Interactive Edit mode or explicit span click delegation
+        ClickableText(
+            text = annotatedString,
+            modifier = modifier,
+            style = TextStyle(
+                lineHeight = lineHeightSp,
+                textAlign = textAlign
+            ),
+            onClick = { offset ->
+                val urlAnnotation = annotatedString.getStringAnnotations(tag = "URL", start = offset, end = offset).firstOrNull()
+                if (urlAnnotation != null) {
+                    val url = urlAnnotation.item
+                    try {
+                        val uri = if (!url.startsWith("http://") && !url.startsWith("https://")) "https://$url" else url
+                        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(uri))
+                        context.startActivity(intent)
+                    } catch (_: Exception) {
+                        onSpanClick()
+                    }
+                } else {
+                    onSpanClick()
                 }
             }
-        }
-    )
+        )
+    } else if (hasUrls) {
+        // Standard view mode with links
+        ClickableText(
+            text = annotatedString,
+            modifier = modifier,
+            style = TextStyle(
+                lineHeight = lineHeightSp,
+                textAlign = textAlign
+            ),
+            onClick = { offset ->
+                annotatedString.getStringAnnotations(tag = "URL", start = offset, end = offset).firstOrNull()?.let { annotation ->
+                    val url = annotation.item
+                    try {
+                        val uri = if (!url.startsWith("http://") && !url.startsWith("https://")) "https://$url" else url
+                        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(uri))
+                        context.startActivity(intent)
+                    } catch (e: Exception) {
+                        Toast.makeText(context, "Could not open link: $url", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            }
+        )
+    } else {
+        // Standard view mode without links: Plain Text that does not intercept/consume parent touches
+        Text(
+            text = annotatedString,
+            modifier = modifier,
+            style = TextStyle(
+                lineHeight = lineHeightSp,
+                textAlign = textAlign
+            )
+        )
+    }
 }

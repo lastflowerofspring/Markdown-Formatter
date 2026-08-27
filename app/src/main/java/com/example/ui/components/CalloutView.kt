@@ -31,7 +31,8 @@ fun CalloutView(
     lineSpacing: LineSpacingPreference,
     fontFamily: FontFamilyPreference,
     modifier: Modifier = Modifier,
-    searchQuery: String = ""
+    searchQuery: String = "",
+    onSpanClick: (() -> Unit)? = null
 ) {
     val (accentColor, icon, defaultLabel) = when (type) {
         CalloutType.NOTE -> Triple(Color(0xFF3B82F6), Icons.Default.Info, "Note")
@@ -101,7 +102,8 @@ fun CalloutView(
                     fontSize = fontSize,
                     lineSpacing = lineSpacing,
                     fontFamily = fontFamily,
-                    searchQuery = searchQuery
+                    searchQuery = searchQuery,
+                    onSpanClick = onSpanClick
                 )
             }
         }

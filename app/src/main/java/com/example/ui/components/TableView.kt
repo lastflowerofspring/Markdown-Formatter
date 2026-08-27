@@ -124,7 +124,7 @@ fun TableView(
                                 if (isInteractiveMode && onCellClick != null) {
                                     Modifier
                                         .clickable { onCellClick(-1, colIdx) }
-                                        .background(themeColors.primary.copy(alpha = 0.05f))
+                                        .background(themeColors.primary.copy(alpha = 0.08f))
                                 } else {
                                     Modifier
                                 }
@@ -143,7 +143,8 @@ fun TableView(
                                 fontFamily = fontFamily,
                                 isHeader = true,
                                 textAlign = textAlign,
-                                searchQuery = searchQuery
+                                searchQuery = searchQuery,
+                                onSpanClick = if (isInteractiveMode && onCellClick != null) { { onCellClick(-1, colIdx) } } else null
                             )
                         }
 
@@ -195,7 +196,7 @@ fun TableView(
                                     if (isInteractiveMode && onCellClick != null) {
                                         Modifier
                                             .clickable { onCellClick(rowIdx, colIdx) }
-                                            .background(themeColors.primary.copy(alpha = 0.03f))
+                                            .background(themeColors.primary.copy(alpha = 0.05f))
                                     } else {
                                         Modifier
                                     }
@@ -214,7 +215,8 @@ fun TableView(
                                     fontFamily = fontFamily,
                                     isHeader = false,
                                     textAlign = textAlign,
-                                    searchQuery = searchQuery
+                                    searchQuery = searchQuery,
+                                    onSpanClick = if (isInteractiveMode && onCellClick != null) { { onCellClick(rowIdx, colIdx) } } else null
                                 )
                             }
 

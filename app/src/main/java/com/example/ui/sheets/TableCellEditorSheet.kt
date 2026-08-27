@@ -47,7 +47,7 @@ fun TableCellEditorSheet(
     var activeCol by remember { mutableIntStateOf(selectedCol) }
     var currentMatrix by remember { mutableStateOf(matrix) }
 
-    var cellValue by remember(activeRow, activeCol, currentMatrix) {
+    var cellValue by remember(activeRow, activeCol) {
         val text = currentMatrix.getCell(activeRow, activeCol)
         mutableStateOf(TextFieldValue(text, TextRange(text.length)))
     }
@@ -65,22 +65,28 @@ fun TableCellEditorSheet(
         }
     }
 
-    fun updateCurrentCellAndCommit(newText: String) {
-        val updated = currentMatrix.updateCell(activeRow, activeCol, newText)
-        currentMatrix = updated
+    // Debounced background sync while typing without interrupting IME composition
+    LaunchedEffect(cellValue.text) {
+        kotlinx.coroutines.delay(800)
+        val updated = currentMatrix.updateCell(activeRow, activeCol, cellValue.text)
         onSaveMatrix(updated)
     }
 
     fun handleDismiss() {
         keyboardController?.hide()
-        updateCurrentCellAndCommit(cellValue.text)
+        val updated = currentMatrix.updateCell(activeRow, activeCol, cellValue.text)
+        currentMatrix = updated
+        onSaveMatrix(updated)
         onDismiss()
     }
 
     fun moveToNextCell() {
-        updateCurrentCellAndCommit(cellValue.text)
-        val numCols = currentMatrix.columnCount
-        val numRows = currentMatrix.rowCount
+        val updated = currentMatrix.updateCell(activeRow, activeCol, cellValue.text)
+        currentMatrix = updated
+        onSaveMatrix(updated)
+
+        val numCols = updated.columnCount
+        val numRows = updated.rowCount
         if (activeCol < numCols - 1) {
             activeCol++
         } else if (activeRow < numRows - 1) {
@@ -90,8 +96,11 @@ fun TableCellEditorSheet(
     }
 
     fun moveToPrevCell() {
-        updateCurrentCellAndCommit(cellValue.text)
-        val numCols = currentMatrix.columnCount
+        val updated = currentMatrix.updateCell(activeRow, activeCol, cellValue.text)
+        currentMatrix = updated
+        onSaveMatrix(updated)
+
+        val numCols = updated.columnCount
         if (activeCol > 0) {
             activeCol--
         } else if (activeRow > -1) {
@@ -191,7 +200,6 @@ fun TableCellEditorSheet(
                     value = cellValue,
                     onValueChange = {
                         cellValue = it
-                        updateCurrentCellAndCommit(it.text)
                     },
                     textStyle = TextStyle(
                         color = themeColors.onSurface,
@@ -234,7 +242,8 @@ fun TableCellEditorSheet(
                 // Column Alignment Toggle
                 FilledTonalButton(
                     onClick = {
-                        val updated = currentMatrix.toggleAlignment(activeCol)
+                        val base = currentMatrix.updateCell(activeRow, activeCol, cellValue.text)
+                        val updated = base.toggleAlignment(activeCol)
                         currentMatrix = updated
                         onSaveMatrix(updated)
                     },
@@ -255,7 +264,8 @@ fun TableCellEditorSheet(
                 // Add Row Below
                 OutlinedButton(
                     onClick = {
-                        val updated = currentMatrix.addRow(if (activeRow == -1) 0 else activeRow)
+                        val base = currentMatrix.updateCell(activeRow, activeCol, cellValue.text)
+                        val updated = base.addRow(if (activeRow == -1) 0 else activeRow)
                         currentMatrix = updated
                         onSaveMatrix(updated)
                         activeRow = if (activeRow == -1) 0 else activeRow + 1
@@ -271,7 +281,8 @@ fun TableCellEditorSheet(
                 // Add Column Right
                 OutlinedButton(
                     onClick = {
-                        val updated = currentMatrix.addColumn(activeCol)
+                        val base = currentMatrix.updateCell(activeRow, activeCol, cellValue.text)
+                        val updated = base.addColumn(activeCol)
                         currentMatrix = updated
                         onSaveMatrix(updated)
                         activeCol = activeCol + 1
@@ -289,7 +300,8 @@ fun TableCellEditorSheet(
                     OutlinedButton(
                         onClick = {
                             val targetRow = activeRow
-                            val updated = currentMatrix.deleteRow(targetRow)
+                            val base = currentMatrix.updateCell(activeRow, activeCol, cellValue.text)
+                            val updated = base.deleteRow(targetRow)
                             currentMatrix = updated
                             onSaveMatrix(updated)
                             activeRow = (targetRow - 1).coerceAtLeast(-1)
@@ -309,7 +321,8 @@ fun TableCellEditorSheet(
                     OutlinedButton(
                         onClick = {
                             val targetCol = activeCol
-                            val updated = currentMatrix.deleteColumn(targetCol)
+                            val base = currentMatrix.updateCell(activeRow, activeCol, cellValue.text)
+                            val updated = base.deleteColumn(targetCol)
                             currentMatrix = updated
                             onSaveMatrix(updated)
                             activeCol = (targetCol - 1).coerceAtLeast(0)
@@ -346,7 +359,9 @@ fun TableCellEditorSheet(
                                     "${wrapper.first}$cur${wrapper.second}"
                                 }
                                 cellValue = TextFieldValue(newText, TextRange(newText.length))
-                                updateCurrentCellAndCommit(newText)
+                                val updated = currentMatrix.updateCell(activeRow, activeCol, newText)
+                                currentMatrix = updated
+                                onSaveMatrix(updated)
                             }
                     ) {
                         Text(
