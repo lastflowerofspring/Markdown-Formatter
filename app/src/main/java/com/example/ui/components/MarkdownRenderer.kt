@@ -1,5 +1,8 @@
 package com.example.ui.components
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -12,6 +15,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckBox
 import androidx.compose.material.icons.filled.CheckBoxOutlineBlank
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Functions
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
@@ -37,7 +41,10 @@ fun MarkdownRenderer(
     lazyListState: LazyListState,
     modifier: Modifier = Modifier,
     searchQuery: String = "",
-    onToggleTask: ((Int, Boolean) -> Unit)? = null
+    isInteractiveMode: Boolean = false,
+    onToggleTask: ((Int, Boolean) -> Unit)? = null,
+    onEditBlock: ((MarkdownBlock) -> Unit)? = null,
+    onEditTableCell: ((block: MarkdownBlock.TableBlock, rowIdx: Int, colIdx: Int) -> Unit)? = null
 ) {
     if (document.blocks.isEmpty()) {
         Box(
@@ -74,117 +81,162 @@ fun MarkdownRenderer(
         contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 96.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
+        // Optional hint banner when in Interactive Edit mode
+        if (isInteractiveMode) {
+            item {
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = themeColors.primaryContainer.copy(alpha = 0.6f),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Edit,
+                            contentDescription = null,
+                            tint = themeColors.onPrimaryContainer,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Text(
+                            text = "Interactive Formatted Mode: Tap any block or table cell to edit inline.",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = themeColors.onPrimaryContainer
+                        )
+                    }
+                }
+            }
+        }
+
         itemsIndexed(
             items = document.blocks,
-            key = { index, _ -> index }
+            key = { _, block -> block.blockId }
         ) { index, block ->
-            when (block) {
-                is MarkdownBlock.HeaderBlock -> {
-                    RenderHeader(
-                        header = block,
-                        themeColors = themeColors,
-                        fontSize = fontSize,
-                        fontFamily = fontFamily
-                    )
-                }
+            val blockModifier = if (isInteractiveMode && block !is MarkdownBlock.DividerBlock && block !is MarkdownBlock.TableBlock) {
+                Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(6.dp))
+                    .clickable { onEditBlock?.invoke(block) }
+            } else {
+                Modifier.fillMaxWidth()
+            }
 
-                is MarkdownBlock.ParagraphBlock -> {
-                    RenderInlineSpans(
-                        spanGroup = block.content,
-                        themeColors = themeColors,
-                        fontSize = fontSize,
-                        lineSpacing = lineSpacing,
-                        fontFamily = fontFamily,
-                        searchQuery = searchQuery,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                }
+            Box(modifier = blockModifier) {
+                when (block) {
+                    is MarkdownBlock.HeaderBlock -> {
+                        RenderHeader(
+                            header = block,
+                            themeColors = themeColors,
+                            fontSize = fontSize,
+                            fontFamily = fontFamily
+                        )
+                    }
 
-                is MarkdownBlock.CodeBlock -> {
-                    CodeBlockView(
-                        code = block.code,
-                        language = block.language,
-                        themeColors = themeColors,
-                        fontSize = fontSize
-                    )
-                }
+                    is MarkdownBlock.ParagraphBlock -> {
+                        RenderInlineSpans(
+                            spanGroup = block.content,
+                            themeColors = themeColors,
+                            fontSize = fontSize,
+                            lineSpacing = lineSpacing,
+                            fontFamily = fontFamily,
+                            searchQuery = searchQuery,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
 
-                is MarkdownBlock.CalloutBlock -> {
-                    CalloutView(
-                        type = block.type,
-                        title = block.title,
-                        content = block.content,
-                        themeColors = themeColors,
-                        fontSize = fontSize,
-                        lineSpacing = lineSpacing,
-                        fontFamily = fontFamily,
-                        searchQuery = searchQuery
-                    )
-                }
+                    is MarkdownBlock.CodeBlock -> {
+                        CodeBlockView(
+                            code = block.code,
+                            language = block.language,
+                            themeColors = themeColors,
+                            fontSize = fontSize
+                        )
+                    }
 
-                is MarkdownBlock.BulletListBlock -> {
-                    RenderBulletList(
-                        bulletList = block,
-                        themeColors = themeColors,
-                        fontSize = fontSize,
-                        lineSpacing = lineSpacing,
-                        fontFamily = fontFamily,
-                        searchQuery = searchQuery
-                    )
-                }
+                    is MarkdownBlock.CalloutBlock -> {
+                        CalloutView(
+                            type = block.type,
+                            title = block.title,
+                            content = block.content,
+                            themeColors = themeColors,
+                            fontSize = fontSize,
+                            lineSpacing = lineSpacing,
+                            fontFamily = fontFamily,
+                            searchQuery = searchQuery
+                        )
+                    }
 
-                is MarkdownBlock.NumberedListBlock -> {
-                    RenderNumberedList(
-                        numberedList = block,
-                        themeColors = themeColors,
-                        fontSize = fontSize,
-                        lineSpacing = lineSpacing,
-                        fontFamily = fontFamily,
-                        searchQuery = searchQuery
-                    )
-                }
+                    is MarkdownBlock.BulletListBlock -> {
+                        RenderBulletList(
+                            bulletList = block,
+                            themeColors = themeColors,
+                            fontSize = fontSize,
+                            lineSpacing = lineSpacing,
+                            fontFamily = fontFamily,
+                            searchQuery = searchQuery
+                        )
+                    }
 
-                is MarkdownBlock.TaskListBlock -> {
-                    RenderTaskList(
-                        taskList = block,
-                        themeColors = themeColors,
-                        fontSize = fontSize,
-                        lineSpacing = lineSpacing,
-                        fontFamily = fontFamily,
-                        searchQuery = searchQuery,
-                        onToggle = { lineIdx, isChecked ->
-                            onToggleTask?.invoke(lineIdx, isChecked)
-                        }
-                    )
-                }
+                    is MarkdownBlock.NumberedListBlock -> {
+                        RenderNumberedList(
+                            numberedList = block,
+                            themeColors = themeColors,
+                            fontSize = fontSize,
+                            lineSpacing = lineSpacing,
+                            fontFamily = fontFamily,
+                            searchQuery = searchQuery
+                        )
+                    }
 
-                is MarkdownBlock.TableBlock -> {
-                    TableView(
-                        headers = block.headers,
-                        alignments = block.alignments,
-                        rows = block.rows,
-                        themeColors = themeColors,
-                        fontSize = fontSize,
-                        lineSpacing = lineSpacing,
-                        fontFamily = fontFamily,
-                        searchQuery = searchQuery
-                    )
-                }
+                    is MarkdownBlock.TaskListBlock -> {
+                        RenderTaskList(
+                            taskList = block,
+                            themeColors = themeColors,
+                            fontSize = fontSize,
+                            lineSpacing = lineSpacing,
+                            fontFamily = fontFamily,
+                            searchQuery = searchQuery,
+                            onToggle = { lineIdx, isChecked ->
+                                onToggleTask?.invoke(lineIdx, isChecked)
+                            }
+                        )
+                    }
 
-                is MarkdownBlock.DividerBlock -> {
-                    Divider(
-                        color = themeColors.divider,
-                        thickness = 1.dp,
-                        modifier = Modifier.padding(vertical = 8.dp)
-                    )
-                }
+                    is MarkdownBlock.TableBlock -> {
+                        TableView(
+                            headers = block.headers,
+                            alignments = block.alignments,
+                            rows = block.rows,
+                            themeColors = themeColors,
+                            fontSize = fontSize,
+                            lineSpacing = lineSpacing,
+                            fontFamily = fontFamily,
+                            searchQuery = searchQuery,
+                            isInteractiveMode = isInteractiveMode,
+                            onCellClick = { rowIdx, colIdx ->
+                                onEditTableCell?.invoke(block, rowIdx, colIdx)
+                            }
+                        )
+                    }
 
-                is MarkdownBlock.MathBlock -> {
-                    RenderMathBlock(
-                        math = block,
-                        themeColors = themeColors,
-                        fontSize = fontSize
-                    )
+                    is MarkdownBlock.DividerBlock -> {
+                        Divider(
+                            color = themeColors.divider,
+                            thickness = 1.dp,
+                            modifier = Modifier.padding(vertical = 8.dp)
+                        )
+                    }
+
+                    is MarkdownBlock.MathBlock -> {
+                        RenderMathBlock(
+                            math = block,
+                            themeColors = themeColors,
+                            fontSize = fontSize
+                        )
+                    }
                 }
             }
         }

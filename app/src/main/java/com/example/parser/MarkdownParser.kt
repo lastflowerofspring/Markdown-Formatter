@@ -32,6 +32,8 @@ object MarkdownParser {
                 continue
             }
 
+            val startLine = i
+
             // 2. Fenced Code Block: ```lang
             if (trimmed.startsWith("```") || trimmed.startsWith("~~~")) {
                 val fence = if (trimmed.startsWith("```")) "```" else "~~~"
@@ -48,7 +50,15 @@ object MarkdownParser {
                     codeBuilder.append(codeLine)
                     i++
                 }
-                blocks.add(MarkdownBlock.CodeBlock(language = lang, code = codeBuilder.toString()))
+                blocks.add(
+                    MarkdownBlock.CodeBlock(
+                        language = lang,
+                        code = codeBuilder.toString(),
+                        blockId = "code_${blocks.size}_$startLine",
+                        lineStart = startLine,
+                        lineEnd = i - 1
+                    )
+                )
                 continue
             }
 
@@ -56,7 +66,14 @@ object MarkdownParser {
             if (trimmed.startsWith("$$")) {
                 if (trimmed.length > 2 && trimmed.endsWith("$$") && trimmed != "$$") {
                     val latex = trimmed.removePrefix("$$").removeSuffix("$$").trim()
-                    blocks.add(MarkdownBlock.MathBlock(latex))
+                    blocks.add(
+                        MarkdownBlock.MathBlock(
+                            latex = latex,
+                            blockId = "math_${blocks.size}_$startLine",
+                            lineStart = startLine,
+                            lineEnd = startLine
+                        )
+                    )
                     i++
                     continue
                 } else {
@@ -79,14 +96,27 @@ object MarkdownParser {
                         mathBuilder.append(mathLine)
                         i++
                     }
-                    blocks.add(MarkdownBlock.MathBlock(mathBuilder.toString()))
+                    blocks.add(
+                        MarkdownBlock.MathBlock(
+                            latex = mathBuilder.toString(),
+                            blockId = "math_${blocks.size}_$startLine",
+                            lineStart = startLine,
+                            lineEnd = i - 1
+                        )
+                    )
                     continue
                 }
             }
 
             // 4. Horizontal Rule / Divider: ---, ***, ___
             if (trimmed.matches(Regex("^(\\*{3,}|-{3,}|_{3,})$"))) {
-                blocks.add(MarkdownBlock.DividerBlock)
+                blocks.add(
+                    MarkdownBlock.DividerBlock(
+                        blockId = "div_${blocks.size}_$startLine",
+                        lineStart = startLine,
+                        lineEnd = startLine
+                    )
+                )
                 i++
                 continue
             }
@@ -97,7 +127,14 @@ object MarkdownParser {
                 val level = headerMatch.groupValues[1].length
                 val title = headerMatch.groupValues[2].trim()
                 val id = "h_${headings.size}_${title.filter { it.isLetterOrDigit() }.take(16)}"
-                val block = MarkdownBlock.HeaderBlock(level = level, text = title, id = id)
+                val block = MarkdownBlock.HeaderBlock(
+                    level = level,
+                    text = title,
+                    id = id,
+                    blockId = "hdr_${blocks.size}_$startLine",
+                    lineStart = startLine,
+                    lineEnd = startLine
+                )
                 headings.add(HeadingOutlineItem(id = id, level = level, title = title, blockIndex = blocks.size))
                 blocks.add(block)
                 i++
@@ -133,7 +170,10 @@ object MarkdownParser {
                         MarkdownBlock.CalloutBlock(
                             type = calloutType,
                             title = explicitTitle,
-                            content = parseInlineSpans(fullQuoteText.ifEmpty { explicitTitle ?: calloutType.defaultTitle })
+                            content = parseInlineSpans(fullQuoteText.ifEmpty { explicitTitle ?: calloutType.defaultTitle }),
+                            blockId = "callout_${blocks.size}_$startLine",
+                            lineStart = startLine,
+                            lineEnd = i - 1
                         )
                     )
                 } else {
@@ -142,7 +182,10 @@ object MarkdownParser {
                         MarkdownBlock.CalloutBlock(
                             type = CalloutType.QUOTE,
                             title = null,
-                            content = parseInlineSpans(fullQuoteText)
+                            content = parseInlineSpans(fullQuoteText),
+                            blockId = "callout_${blocks.size}_$startLine",
+                            lineStart = startLine,
+                            lineEnd = i - 1
                         )
                     )
                 }
@@ -171,7 +214,14 @@ object MarkdownParser {
                         break
                     }
                 }
-                blocks.add(MarkdownBlock.TaskListBlock(taskItems))
+                blocks.add(
+                    MarkdownBlock.TaskListBlock(
+                        items = taskItems,
+                        blockId = "tasklist_${blocks.size}_$startLine",
+                        lineStart = startLine,
+                        lineEnd = i - 1
+                    )
+                )
                 continue
             }
 
@@ -201,7 +251,10 @@ object MarkdownParser {
                     MarkdownBlock.TableBlock(
                         headers = headerCells.map { parseInlineSpans(it) },
                         alignments = alignments,
-                        rows = rowBlocks
+                        rows = rowBlocks,
+                        blockId = "table_${blocks.size}_$startLine",
+                        lineStart = startLine,
+                        lineEnd = i - 1
                     )
                 )
                 continue
@@ -214,7 +267,6 @@ object MarkdownParser {
                     val rawListLine = lines[i]
                     val bulletMatch = Regex("^(\\s*)([-*+])\\s+(.*)$").find(rawListLine)
                     if (bulletMatch != null) {
-                        // Exclude task list items
                         val contentText = bulletMatch.groupValues[3]
                         if (contentText.startsWith("[ ]") || contentText.startsWith("[x]") || contentText.startsWith("[X]")) {
                             break
@@ -224,7 +276,8 @@ object MarkdownParser {
                         bulletItems.add(
                             BulletItem(
                                 level = level,
-                                content = parseInlineSpans(contentText)
+                                content = parseInlineSpans(contentText),
+                                rawIndex = i
                             )
                         )
                         i++
@@ -233,7 +286,14 @@ object MarkdownParser {
                     }
                 }
                 if (bulletItems.isNotEmpty()) {
-                    blocks.add(MarkdownBlock.BulletListBlock(bulletItems))
+                    blocks.add(
+                        MarkdownBlock.BulletListBlock(
+                            items = bulletItems,
+                            blockId = "bullet_${blocks.size}_$startLine",
+                            lineStart = startLine,
+                            lineEnd = i - 1
+                        )
+                    )
                     continue
                 }
             }
@@ -253,7 +313,8 @@ object MarkdownParser {
                             NumberedItem(
                                 level = level,
                                 number = numStr,
-                                content = parseInlineSpans(text)
+                                content = parseInlineSpans(text),
+                                rawIndex = i
                             )
                         )
                         i++
@@ -262,13 +323,21 @@ object MarkdownParser {
                     }
                 }
                 if (numberedItems.isNotEmpty()) {
-                    blocks.add(MarkdownBlock.NumberedListBlock(numberedItems))
+                    blocks.add(
+                        MarkdownBlock.NumberedListBlock(
+                            items = numberedItems,
+                            blockId = "numbered_${blocks.size}_$startLine",
+                            lineStart = startLine,
+                            lineEnd = i - 1
+                        )
+                    )
                     continue
                 }
             }
 
-            // 11. Normal Paragraph (accumulate multi-line paragraphs)
+            // 11. Normal Paragraph
             val paragraphBuilder = StringBuilder()
+            val paragraphStartLine = i
             while (i < lines.size) {
                 val currentLine = lines[i]
                 val curTrim = currentLine.trim()
@@ -292,11 +361,17 @@ object MarkdownParser {
 
             val pText = paragraphBuilder.toString()
             if (pText.isNotEmpty()) {
-                blocks.add(MarkdownBlock.ParagraphBlock(content = parseInlineSpans(pText)))
+                blocks.add(
+                    MarkdownBlock.ParagraphBlock(
+                        content = parseInlineSpans(pText),
+                        blockId = "p_${blocks.size}_$paragraphStartLine",
+                        lineStart = paragraphStartLine,
+                        lineEnd = i - 1
+                    )
+                )
             }
         }
 
-        // Calculate metadata
         val words = rawText.split(Regex("\\s+")).filter { it.isNotBlank() }
         val wordCount = words.size
         val charCount = rawText.length
@@ -320,7 +395,7 @@ object MarkdownParser {
     fun parseInlineSpans(text: String): InlineSpanGroup {
         val spans = mutableListOf<InlineSpan>()
         val pattern = Regex("(`[^`]+`|\\[[^\\]]+\\]\\([^)]+\\)|\\$\\$?[^$]+\\$\\$?|\\*\\*\\*[^*]+\\*\\*\\*|\\*\\*[^*]+\\*\\*|\\*[^*]+\\*|~~[^~]+~~|__[^_]+__|_[^_]+_)")
-        
+
         var currentIndex = 0
         pattern.findAll(text).forEach { match ->
             if (match.range.first > currentIndex) {
@@ -330,36 +405,29 @@ object MarkdownParser {
 
             val token = match.value
             when {
-                // Inline Code: `code`
                 token.startsWith("`") && token.endsWith("`") -> {
                     spans.add(InlineSpan.InlineCode(code = token.removeSurrounding("`")))
                 }
-                // Markdown Link: [text](url)
                 token.startsWith("[") && token.contains("](") && token.endsWith(")") -> {
                     val linkText = token.substringAfter("[").substringBefore("](")
                     val url = token.substringAfter("](").substringBeforeLast(")")
                     spans.add(InlineSpan.Link(text = linkText, url = url))
                 }
-                // Inline Math: $latex$
                 token.startsWith("$") && token.endsWith("$") -> {
                     val latex = token.removeSurrounding("$").trim()
                     spans.add(InlineSpan.InlineMath(latex = latex))
                 }
-                // Bold & Italic: ***text*** or ___text___
                 (token.startsWith("***") && token.endsWith("***")) || (token.startsWith("___") && token.endsWith("___")) -> {
                     val inner = if (token.startsWith("***")) token.removeSurrounding("***") else token.removeSurrounding("___")
                     spans.add(InlineSpan.Text(content = inner, isBold = true, isItalic = true))
                 }
-                // Bold: **text** or __text__
                 (token.startsWith("**") && token.endsWith("**")) || (token.startsWith("__") && token.endsWith("__")) -> {
                     val inner = if (token.startsWith("**")) token.removeSurrounding("**") else token.removeSurrounding("__")
                     spans.add(InlineSpan.Text(content = inner, isBold = true))
                 }
-                // Strikethrough: ~~text~~
                 token.startsWith("~~") && token.endsWith("~~") -> {
                     spans.add(InlineSpan.Text(content = token.removeSurrounding("~~"), isStrike = true))
                 }
-                // Italic: *text* or _text_
                 (token.startsWith("*") && token.endsWith("*")) || (token.startsWith("_") && token.endsWith("_")) -> {
                     val inner = if (token.startsWith("*")) token.removeSurrounding("*") else token.removeSurrounding("_")
                     spans.add(InlineSpan.Text(content = inner, isItalic = true))

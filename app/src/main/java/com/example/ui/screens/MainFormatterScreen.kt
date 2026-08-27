@@ -56,6 +56,7 @@ fun MainFormatterScreen(
     val loadedFileName by viewModel.loadedFileName.collectAsStateWithLifecycle()
     val formattedDoc by viewModel.formattedDoc.collectAsStateWithLifecycle()
     val viewMode by viewModel.viewMode.collectAsStateWithLifecycle()
+    val isInteractiveEditMode by viewModel.isInteractiveEditMode.collectAsStateWithLifecycle()
     val isReadingMode by viewModel.isReadingMode.collectAsStateWithLifecycle()
     val themePreset by viewModel.themePreset.collectAsStateWithLifecycle()
     val fontSize by viewModel.fontSize.collectAsStateWithLifecycle()
@@ -76,6 +77,11 @@ fun MainFormatterScreen(
     var showHistorySheet by remember { mutableStateOf(false) }
     var showSamplesSheet by remember { mutableStateOf(false) }
     var showSearchOverlay by remember { mutableStateOf(false) }
+
+    // Interactive Edit Sheet States
+    var editingBlock by remember { mutableStateOf<MarkdownBlock?>(null) }
+    var editingTableMatrixState by remember { mutableStateOf<Pair<MarkdownBlock.TableBlock, TableMatrix>?>(null) }
+    var editingTableCellCoords by remember { mutableStateOf<Pair<Int, Int>?>(null) }
 
     // File Picker Launcher for any common text file
     val filePickerLauncher = rememberLauncherForActivityResult(
@@ -129,6 +135,13 @@ fun MainFormatterScreen(
                 ReaderBottomMetricsBar(
                     themeColors = themeColors,
                     doc = formattedDoc,
+                    isInteractiveMode = isInteractiveEditMode,
+                    onToggleInteractiveMode = {
+                        viewModel.toggleInteractiveEditMode()
+                        if (!isInteractiveEditMode) {
+                            Toast.makeText(context, "Interactive Edit Enabled: Tap any formatted block or table cell to edit", Toast.LENGTH_SHORT).show()
+                        }
+                    },
                     onCopyPlain = {
                         val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                         val clip = ClipData.newPlainText("Plain Text", rawText)
@@ -165,8 +178,23 @@ fun MainFormatterScreen(
                         fontFamily = fontFamily,
                         lazyListState = lazyListState,
                         searchQuery = searchQuery,
+                        isInteractiveMode = isInteractiveEditMode,
                         onToggleTask = { lineIdx, isChecked ->
                             viewModel.toggleTaskItem(lineIdx, isChecked)
+                        },
+                        onEditBlock = { block ->
+                            editingBlock = block
+                        },
+                        onEditTableCell = { tableBlock, rowIdx, colIdx ->
+                            val rawHeaders = tableBlock.headers.map { it.rawText }
+                            val rawRows = tableBlock.rows.map { row -> row.map { it.rawText } }
+                            val matrix = TableMatrix(
+                                headers = rawHeaders,
+                                alignments = tableBlock.alignments,
+                                rows = rawRows
+                            )
+                            editingTableMatrixState = Pair(tableBlock, matrix)
+                            editingTableCellCoords = Pair(rowIdx, colIdx)
                         }
                     )
                 }
@@ -237,8 +265,23 @@ fun MainFormatterScreen(
                                 fontFamily = fontFamily,
                                 lazyListState = lazyListState,
                                 searchQuery = searchQuery,
+                                isInteractiveMode = isInteractiveEditMode,
                                 onToggleTask = { lineIdx, isChecked ->
                                     viewModel.toggleTaskItem(lineIdx, isChecked)
+                                },
+                                onEditBlock = { block ->
+                                    editingBlock = block
+                                },
+                                onEditTableCell = { tableBlock, rowIdx, colIdx ->
+                                    val rawHeaders = tableBlock.headers.map { it.rawText }
+                                    val rawRows = tableBlock.rows.map { row -> row.map { it.rawText } }
+                                    val matrix = TableMatrix(
+                                        headers = rawHeaders,
+                                        alignments = tableBlock.alignments,
+                                        rows = rawRows
+                                    )
+                                    editingTableMatrixState = Pair(tableBlock, matrix)
+                                    editingTableCellCoords = Pair(rowIdx, colIdx)
                                 }
                             )
                         }
@@ -297,6 +340,40 @@ fun MainFormatterScreen(
                 }
             }
         }
+    }
+
+    // Modal Block Editor Sheet
+    editingBlock?.let { block ->
+        BlockEditorSheet(
+            block = block,
+            themeColors = themeColors,
+            onSaveBlockText = { newMarkdown ->
+                viewModel.updateBlockContent(block.lineStart, block.lineEnd, newMarkdown)
+            },
+            onDismiss = { editingBlock = null }
+        )
+    }
+
+    // Modal Table Cell / Pro Sheet Editor
+    val tablePair = editingTableMatrixState
+    val coords = editingTableCellCoords
+    if (tablePair != null && coords != null) {
+        val (tableBlock, currentMatrix) = tablePair
+        TableCellEditorSheet(
+            matrix = currentMatrix,
+            selectedRow = coords.first,
+            selectedCol = coords.second,
+            themeColors = themeColors,
+            onSaveMatrix = { updatedMatrix ->
+                val newMarkdown = updatedMatrix.toMarkdown()
+                viewModel.updateBlockContent(tableBlock.lineStart, tableBlock.lineEnd, newMarkdown)
+                editingTableMatrixState = Pair(tableBlock, updatedMatrix)
+            },
+            onDismiss = {
+                editingTableMatrixState = null
+                editingTableCellCoords = null
+            }
+        )
     }
 
     // Modal Bottom Sheets
@@ -613,6 +690,8 @@ private fun ReadingModeTopBar(
 private fun ReaderBottomMetricsBar(
     themeColors: ReaderThemeColors,
     doc: FormattedDocument,
+    isInteractiveMode: Boolean,
+    onToggleInteractiveMode: () -> Unit,
     onCopyPlain: () -> Unit,
     onShare: () -> Unit,
     onSaveSnippet: () -> Unit
@@ -626,13 +705,13 @@ private fun ReaderBottomMetricsBar(
             modifier = Modifier
                 .fillMaxWidth()
                 .navigationBarsPadding()
-                .padding(horizontal = 16.dp, vertical = 8.dp),
+                .padding(horizontal = 14.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 Text(
                     text = "${doc.wordCount} words",
@@ -667,14 +746,32 @@ private fun ReaderBottomMetricsBar(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(4.dp)
             ) {
-                IconButton(onClick = onCopyPlain, modifier = Modifier.size(34.dp).testTag("bottom_copy_btn")) {
-                    Icon(Icons.Default.ContentCopy, contentDescription = "Copy Text", tint = themeColors.onSurfaceVariant, modifier = Modifier.size(18.dp))
+                // Interactive Edit Mode Toggle Button beside Copy
+                IconButton(
+                    onClick = onToggleInteractiveMode,
+                    modifier = Modifier.size(36.dp).testTag("bottom_edit_mode_btn")
+                ) {
+                    Icon(
+                        imageVector = if (isInteractiveMode) Icons.Default.Edit else Icons.Outlined.Edit,
+                        contentDescription = "Interactive Edit Formatted",
+                        tint = if (isInteractiveMode) themeColors.primary else themeColors.onSurfaceVariant,
+                        modifier = Modifier.size(20.dp)
+                    )
                 }
-                IconButton(onClick = onShare, modifier = Modifier.size(34.dp).testTag("bottom_share_btn")) {
-                    Icon(Icons.Default.Share, contentDescription = "Share", tint = themeColors.onSurfaceVariant, modifier = Modifier.size(18.dp))
+
+                // Copy Plain Text
+                IconButton(onClick = onCopyPlain, modifier = Modifier.size(36.dp).testTag("bottom_copy_btn")) {
+                    Icon(Icons.Outlined.ContentCopy, contentDescription = "Copy Text", tint = themeColors.onSurfaceVariant, modifier = Modifier.size(19.dp))
                 }
-                IconButton(onClick = onSaveSnippet, modifier = Modifier.size(34.dp).testTag("bottom_bookmark_btn")) {
-                    Icon(Icons.Default.BookmarkBorder, contentDescription = "Save", tint = themeColors.primary, modifier = Modifier.size(18.dp))
+
+                // Share
+                IconButton(onClick = onShare, modifier = Modifier.size(36.dp).testTag("bottom_share_btn")) {
+                    Icon(Icons.Outlined.Share, contentDescription = "Share", tint = themeColors.onSurfaceVariant, modifier = Modifier.size(19.dp))
+                }
+
+                // Save Snippet
+                IconButton(onClick = onSaveSnippet, modifier = Modifier.size(36.dp).testTag("bottom_bookmark_btn")) {
+                    Icon(Icons.Outlined.BookmarkBorder, contentDescription = "Save", tint = themeColors.primary, modifier = Modifier.size(19.dp))
                 }
             }
         }

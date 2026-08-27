@@ -35,7 +35,7 @@ class FormatterViewModel(application: Application) : AndroidViewModel(applicatio
 Format raw text from AI models (Gemini, Claude, GPT), developer notes, and text files with Markdown styling, syntax highlighting, and reading themes.
 
 > [!TIP]
-> Select any text file in Files app, tap Share, and choose Markdown Formatter to open and format it instantly.
+> Tap any paragraph, header, code snippet or table cell to edit inline directly while keeping rich formatting.
 
 ## Code Syntax Highlighting
 
@@ -50,10 +50,10 @@ fun formatDocument(rawInput: String): FormattedDocument {
 
 | Feature | Status | Description |
 | :--- | :---: | :--- |
+| Interactive WYSIWYG | Supported | Tap elements to edit inline with real-time sync |
+| Pro Sheet Tables | Supported | Tap any cell to edit, navigate cells & add rows/cols |
 | Syntax Highlighting | Supported | 15+ programming languages with line numbers |
-| Themes | Supported | Minimal Dark, Slate Night, Dracula, Warm Sepia |
-| System Share & Open | Supported | Open common text files (.md, .txt, .json, .py, etc.) |
-| Outline Navigation | Supported | Jump between sections with table of contents |
+| Themes & Custom Fonts | Supported | Minimal Dark, Slate Night, Dracula, Warm Sepia |
 
 - [x] Switch between themes in Appearance settings
 - [x] Open external text files from Files app
@@ -70,6 +70,9 @@ fun formatDocument(rawInput: String): FormattedDocument {
 
     private val _viewMode = MutableStateFlow(ViewMode.FORMATTED)
     val viewMode: StateFlow<ViewMode> = _viewMode.asStateFlow()
+
+    private val _isInteractiveEditMode = MutableStateFlow(false)
+    val isInteractiveEditMode: StateFlow<Boolean> = _isInteractiveEditMode.asStateFlow()
 
     private val _isReadingMode = MutableStateFlow(false)
     val isReadingMode: StateFlow<Boolean> = _isReadingMode.asStateFlow()
@@ -102,6 +105,14 @@ fun formatDocument(rawInput: String): FormattedDocument {
 
     fun setViewMode(mode: ViewMode) {
         _viewMode.value = mode
+    }
+
+    fun toggleInteractiveEditMode() {
+        _isInteractiveEditMode.value = !_isInteractiveEditMode.value
+    }
+
+    fun setInteractiveEditMode(enabled: Boolean) {
+        _isInteractiveEditMode.value = enabled
     }
 
     fun toggleReadingMode() {
@@ -154,6 +165,23 @@ fun formatDocument(rawInput: String): FormattedDocument {
             }
             lines[lineIndex] = updatedLine
             updateRawText(lines.joinToString("\n"))
+        }
+    }
+
+    fun updateBlockContent(lineStart: Int, lineEnd: Int, newBlockMarkdown: String) {
+        val lines = _rawText.value.lines().toMutableList()
+        if (lineStart in lines.indices && lineEnd in lines.indices && lineStart <= lineEnd) {
+            val newLines = newBlockMarkdown.lines()
+            val before = lines.subList(0, lineStart)
+            val after = lines.subList(lineEnd + 1, lines.size)
+            val combined = ArrayList<String>(before.size + newLines.size + after.size)
+            combined.addAll(before)
+            combined.addAll(newLines)
+            combined.addAll(after)
+            updateRawText(combined.joinToString("\n"))
+        } else {
+            // Fallback: If bounds mismatch, re-parse and append or update
+            updateRawText(newBlockMarkdown)
         }
     }
 

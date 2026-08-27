@@ -1,7 +1,5 @@
 package com.example.model
 
-import androidx.compose.ui.text.AnnotatedString
-
 enum class CalloutType(val defaultTitle: String) {
     NOTE("Note"),
     TIP("Tip"),
@@ -37,13 +35,15 @@ sealed class InlineSpan {
 
 data class BulletItem(
     val level: Int,
-    val content: InlineSpanGroup
+    val content: InlineSpanGroup,
+    val rawIndex: Int = 0
 )
 
 data class NumberedItem(
     val level: Int,
     val number: String,
-    val content: InlineSpanGroup
+    val content: InlineSpanGroup,
+    val rawIndex: Int = 0
 )
 
 data class TaskItem(
@@ -54,49 +54,84 @@ data class TaskItem(
 )
 
 sealed class MarkdownBlock {
+    abstract val blockId: String
+    abstract val lineStart: Int
+    abstract val lineEnd: Int
+
     data class HeaderBlock(
         val level: Int,
         val text: String,
-        val id: String
+        val id: String,
+        override val blockId: String = id,
+        override val lineStart: Int = 0,
+        override val lineEnd: Int = 0
     ) : MarkdownBlock()
 
     data class ParagraphBlock(
-        val content: InlineSpanGroup
+        val content: InlineSpanGroup,
+        override val blockId: String,
+        override val lineStart: Int = 0,
+        override val lineEnd: Int = 0
     ) : MarkdownBlock()
 
     data class CodeBlock(
         val language: String,
-        val code: String
+        val code: String,
+        override val blockId: String,
+        override val lineStart: Int = 0,
+        override val lineEnd: Int = 0
     ) : MarkdownBlock()
 
     data class CalloutBlock(
         val type: CalloutType,
         val title: String?,
-        val content: InlineSpanGroup
+        val content: InlineSpanGroup,
+        override val blockId: String,
+        override val lineStart: Int = 0,
+        override val lineEnd: Int = 0
     ) : MarkdownBlock()
 
     data class BulletListBlock(
-        val items: List<BulletItem>
+        val items: List<BulletItem>,
+        override val blockId: String,
+        override val lineStart: Int = 0,
+        override val lineEnd: Int = 0
     ) : MarkdownBlock()
 
     data class NumberedListBlock(
-        val items: List<NumberedItem>
+        val items: List<NumberedItem>,
+        override val blockId: String,
+        override val lineStart: Int = 0,
+        override val lineEnd: Int = 0
     ) : MarkdownBlock()
 
     data class TaskListBlock(
-        val items: List<TaskItem>
+        val items: List<TaskItem>,
+        override val blockId: String,
+        override val lineStart: Int = 0,
+        override val lineEnd: Int = 0
     ) : MarkdownBlock()
 
     data class TableBlock(
         val headers: List<InlineSpanGroup>,
         val alignments: List<TableAlignment>,
-        val rows: List<List<InlineSpanGroup>>
+        val rows: List<List<InlineSpanGroup>>,
+        override val blockId: String,
+        override val lineStart: Int = 0,
+        override val lineEnd: Int = 0
     ) : MarkdownBlock()
 
-    data object DividerBlock : MarkdownBlock()
+    data class DividerBlock(
+        override val blockId: String,
+        override val lineStart: Int = 0,
+        override val lineEnd: Int = 0
+    ) : MarkdownBlock()
 
     data class MathBlock(
-        val latex: String
+        val latex: String,
+        override val blockId: String,
+        override val lineStart: Int = 0,
+        override val lineEnd: Int = 0
     ) : MarkdownBlock()
 }
 

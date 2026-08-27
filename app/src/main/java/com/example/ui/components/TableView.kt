@@ -2,6 +2,7 @@ package com.example.ui.components
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -28,7 +29,9 @@ fun TableView(
     lineSpacing: LineSpacingPreference,
     fontFamily: FontFamilyPreference,
     modifier: Modifier = Modifier,
-    searchQuery: String = ""
+    searchQuery: String = "",
+    isInteractiveMode: Boolean = false,
+    onCellClick: ((rowIdx: Int, colIdx: Int) -> Unit)? = null
 ) {
     val numCols = remember(headers, rows) {
         maxOf(headers.size, rows.maxOfOrNull { it.size } ?: 0)
@@ -41,7 +44,11 @@ fun TableView(
         modifier = modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(10.dp))
-            .border(1.dp, themeColors.tableBorder, RoundedCornerShape(10.dp))
+            .border(
+                width = if (isInteractiveMode) 1.5.dp else 1.dp,
+                color = if (isInteractiveMode) themeColors.primary else themeColors.tableBorder,
+                shape = RoundedCornerShape(10.dp)
+            )
             .testTag("table_view_card")
     ) {
         val availableWidth = maxWidth
@@ -87,7 +94,7 @@ fun TableView(
                 .horizontalScroll(scrollState)
         ) {
             Column(modifier = Modifier.width(IntrinsicSize.Max)) {
-                // Header Row
+                // Header Row (Row Index = -1)
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -110,11 +117,22 @@ fun TableView(
                         }
                         val colWidth = effectiveWidths.getOrElse(colIdx) { 120.dp }
 
+                        val cellModifier = Modifier
+                            .width(colWidth)
+                            .fillMaxHeight()
+                            .then(
+                                if (isInteractiveMode && onCellClick != null) {
+                                    Modifier
+                                        .clickable { onCellClick(-1, colIdx) }
+                                        .background(themeColors.primary.copy(alpha = 0.05f))
+                                } else {
+                                    Modifier
+                                }
+                            )
+                            .padding(horizontal = 14.dp, vertical = 10.dp)
+
                         Box(
-                            modifier = Modifier
-                                .width(colWidth)
-                                .fillMaxHeight()
-                                .padding(horizontal = 14.dp, vertical = 10.dp),
+                            modifier = cellModifier,
                             contentAlignment = boxAlignment
                         ) {
                             RenderInlineSpans(
@@ -143,7 +161,7 @@ fun TableView(
 
                 Divider(color = themeColors.tableBorder, thickness = 1.dp)
 
-                // Body Rows
+                // Body Rows (Row Index >= 0)
                 rows.forEachIndexed { rowIdx, rowCells ->
                     val isZebra = rowIdx % 2 == 1
                     val rowBg = if (isZebra) themeColors.tableZebraBg else themeColors.surface
@@ -170,11 +188,22 @@ fun TableView(
                             }
                             val colWidth = effectiveWidths.getOrElse(colIdx) { 120.dp }
 
+                            val cellModifier = Modifier
+                                .width(colWidth)
+                                .fillMaxHeight()
+                                .then(
+                                    if (isInteractiveMode && onCellClick != null) {
+                                        Modifier
+                                            .clickable { onCellClick(rowIdx, colIdx) }
+                                            .background(themeColors.primary.copy(alpha = 0.03f))
+                                    } else {
+                                        Modifier
+                                    }
+                                )
+                                .padding(horizontal = 14.dp, vertical = 10.dp)
+
                             Box(
-                                modifier = Modifier
-                                    .width(colWidth)
-                                    .fillMaxHeight()
-                                    .padding(horizontal = 14.dp, vertical = 10.dp),
+                                modifier = cellModifier,
                                 contentAlignment = boxAlignment
                             ) {
                                 RenderInlineSpans(
