@@ -8,7 +8,7 @@ enum class ThemePreset(
     val description: String,
     val isDark: Boolean
 ) {
-    AI_STUDIO_DARK("AI Studio", "Google AI Studio dark workspace palette with high contrast and clean spacing", true),
+    AI_STUDIO_DARK("Studio Dark Pro", "Flat #191919 canvas tuned for focused reading on OLED displays", true),
     MINIMAL_DARK("Minimal Dark", "Refined warm charcoal dark slate for focused reading", true),
     SLATE_DARK("Slate Night", "Deep slate blue-grey canvas", true),
     DRACULA("Dracula", "Iconic dark purple developer palette", true),
@@ -81,29 +81,29 @@ enum class FontFamilyPreference(val label: String, val composeFontFamily: FontFa
 }
 
 object ThemePalettes {
-    // Google AI Studio Dark Canvas Palette (Deep #131314 / #1E1F20 backdrop with clean contrast and refined accents)
+    // Studio Dark Pro Palette (Flat #191919 Canvas backdrop with clean contrast and refined accents)
     val AiStudioDark = ReaderThemeColors(
-        background = Color(0xFF131314),
-        surface = Color(0xFF1E1F20),
-        surfaceVariant = Color(0xFF282A2C),
-        onBackground = Color(0xFFE3E3E3),
-        onSurface = Color(0xFFE3E3E3),
+        background = Color(0xFF191919),
+        surface = Color(0xFF222222),
+        surfaceVariant = Color(0xFF2B2B2D),
+        onBackground = Color(0xFFE4E4E6),
+        onSurface = Color(0xFFE4E4E6),
         onSurfaceVariant = Color(0xFFC4C7C5),
         primary = Color(0xFFA8C7FA),
         primaryContainer = Color(0xFF004A77),
         onPrimaryContainer = Color(0xFFC2E7FF),
         secondary = Color(0xFF6DD58C),
-        outline = Color(0xFF444746),
-        divider = Color(0xFF2B2C2E),
+        outline = Color(0xFF3E3E42),
+        divider = Color(0xFF28282B),
         inlineCodeBg = Color(0xFF282A2C),
         inlineCodeText = Color(0xFFE3E3E3),
-        blockquoteBg = Color(0xFF1E1F20),
+        blockquoteBg = Color(0xFF202022),
         blockquoteBorder = Color(0xFFA8C7FA),
-        tableHeaderBg = Color(0xFF232527),
-        tableZebraBg = Color(0xFF1A1B1C),
-        tableBorder = Color(0xFF3C4043),
+        tableHeaderBg = Color(0xFF242426),
+        tableZebraBg = Color(0xFF1D1D1F),
+        tableBorder = Color(0xFF38383C),
         syntax = CodeSyntaxColors(
-            background = Color(0xFF1E1F20),
+            background = Color(0xFF202022),
             text = Color(0xFFE3E3E3),
             keyword = Color(0xFF7DA0FA),
             string = Color(0xFF6DD58C),

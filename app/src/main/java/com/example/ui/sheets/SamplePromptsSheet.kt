@@ -31,6 +31,29 @@ data class SampleContent(
 object SampleData {
     val samples = listOf(
         SampleContent(
+            title = "GFM Alerts & Callouts",
+            description = "Exact 1:1 replica of Note, Tip, Important, Warning, and Caution callouts",
+            icon = Icons.Default.AutoAwesome,
+            rawMarkdown = """
+# GitHub Flavored Markdown (GFM) Alerts & Callouts
+
+> [!NOTE]
+> **Informational Callout:** Useful information that users should know, even when skimming.
+
+> [!TIP]
+> **Helpful Advice:** Helpful advice for doing things better or more easily.
+
+> [!IMPORTANT]
+> **Key Information:** Key information users need to know to achieve their goal.
+
+> [!WARNING]
+> **Urgent Warning:** Urgent info that needs immediate user attention to avoid problems.
+
+> [!CAUTION]
+> **Destructive Action:** Advises about risks or negative outcomes of certain actions.
+""".trimIndent()
+        ),
+        SampleContent(
             title = "AI Coding Architecture",
             description = "Kotlin Coroutines & Compose with syntax highlighting and callouts",
             icon = Icons.Default.Code,

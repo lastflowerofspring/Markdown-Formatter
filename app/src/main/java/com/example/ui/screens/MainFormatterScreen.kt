@@ -491,9 +491,9 @@ private fun MainTopBar(
                             fontSize = 15.sp
                         )
                         Text(
-                            text = fileName ?: "Pixel 7 Pro Reader",
+                            text = fileName ?: "Reader & Editor",
                             color = if (fileName != null) themeColors.primary else themeColors.onSurfaceVariant.copy(alpha = 0.7f),
-                            fontSize = 10.5.sp,
+                            fontSize = 11.sp,
                             fontWeight = FontWeight.Medium,
                             maxLines = 1
                         )
