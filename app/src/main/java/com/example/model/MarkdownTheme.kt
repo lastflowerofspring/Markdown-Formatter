@@ -8,6 +8,7 @@ enum class ThemePreset(
     val description: String,
     val isDark: Boolean
 ) {
+    AI_STUDIO_DARK("AI Studio", "Google AI Studio dark workspace palette with high contrast and clean spacing", true),
     MINIMAL_DARK("Minimal Dark", "Refined warm charcoal dark slate for focused reading", true),
     SLATE_DARK("Slate Night", "Deep slate blue-grey canvas", true),
     DRACULA("Dracula", "Iconic dark purple developer palette", true),
@@ -80,6 +81,45 @@ enum class FontFamilyPreference(val label: String, val composeFontFamily: FontFa
 }
 
 object ThemePalettes {
+    // Google AI Studio Dark Canvas Palette (Deep #131314 / #1E1F20 backdrop with clean contrast and refined accents)
+    val AiStudioDark = ReaderThemeColors(
+        background = Color(0xFF131314),
+        surface = Color(0xFF1E1F20),
+        surfaceVariant = Color(0xFF282A2C),
+        onBackground = Color(0xFFE3E3E3),
+        onSurface = Color(0xFFE3E3E3),
+        onSurfaceVariant = Color(0xFFC4C7C5),
+        primary = Color(0xFFA8C7FA),
+        primaryContainer = Color(0xFF004A77),
+        onPrimaryContainer = Color(0xFFC2E7FF),
+        secondary = Color(0xFF6DD58C),
+        outline = Color(0xFF444746),
+        divider = Color(0xFF2B2C2E),
+        inlineCodeBg = Color(0xFF282A2C),
+        inlineCodeText = Color(0xFFE3E3E3),
+        blockquoteBg = Color(0xFF1E1F20),
+        blockquoteBorder = Color(0xFFA8C7FA),
+        tableHeaderBg = Color(0xFF232527),
+        tableZebraBg = Color(0xFF1A1B1C),
+        tableBorder = Color(0xFF3C4043),
+        syntax = CodeSyntaxColors(
+            background = Color(0xFF1E1F20),
+            text = Color(0xFFE3E3E3),
+            keyword = Color(0xFF7DA0FA),
+            string = Color(0xFF6DD58C),
+            number = Color(0xFFF2B8B5),
+            comment = Color(0xFF8E918F),
+            type = Color(0xFFFFB77C),
+            function = Color(0xFFA8C7FA),
+            operator = Color(0xFFC4C7C5),
+            punctuation = Color(0xFF8E918F),
+            annotation = Color(0xFFFFB77C),
+            tag = Color(0xFFF2B8B5),
+            attribute = Color(0xFFA8C7FA),
+            lineNumber = Color(0xFF747775)
+        )
+    )
+
     // Primary Minimal Dark Theme (Warm Neutral Charcoal, non-pure-black, non-blueish)
     val MinimalDark = ReaderThemeColors(
         background = Color(0xFF141416),
@@ -425,6 +465,7 @@ object ThemePalettes {
 
     fun getColorsForPreset(preset: ThemePreset, isSystemDark: Boolean): ReaderThemeColors {
         return when (preset) {
+            ThemePreset.AI_STUDIO_DARK -> AiStudioDark
             ThemePreset.MINIMAL_DARK -> MinimalDark
             ThemePreset.EDITORIAL_LIGHT -> EditorialLight
             ThemePreset.SEPIA -> WarmSepia

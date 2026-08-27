@@ -180,27 +180,28 @@ fun CodeBlockView(
             ) {
                 // Line Numbers Gutter
                 if (showLineNumbers && lines.size > 1) {
-                    Column(
+                    val lineNumbersText = remember(lines.size) {
+                        (1..lines.size).joinToString("\n")
+                    }
+                    Box(
                         modifier = Modifier
                             .padding(start = 10.dp, end = 12.dp),
-                        horizontalAlignment = Alignment.End
+                        contentAlignment = Alignment.TopEnd
                     ) {
-                        lines.indices.forEach { idx ->
-                            Text(
-                                text = "${idx + 1}",
-                                color = themeColors.syntax.lineNumber,
-                                fontSize = fontSize.codeSp.sp,
-                                fontFamily = FontFamily.Monospace,
-                                lineHeight = (fontSize.codeSp * 1.45f).sp
-                            )
-                        }
+                        Text(
+                            text = lineNumbersText,
+                            color = themeColors.syntax.lineNumber,
+                            fontSize = fontSize.codeSp.sp,
+                            fontFamily = FontFamily.Monospace,
+                            lineHeight = (fontSize.codeSp * 1.45f).sp
+                        )
                     }
 
                     // Vertical gutter divider
                     Box(
                         modifier = Modifier
                             .width(1.dp)
-                            .height((lines.size * fontSize.codeSp * 1.45f).dp)
+                            .fillMaxHeight()
                             .background(themeColors.outline.copy(alpha = 0.15f))
                     )
                 }

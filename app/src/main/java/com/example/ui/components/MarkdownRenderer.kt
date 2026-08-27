@@ -113,7 +113,8 @@ fun MarkdownRenderer(
 
         itemsIndexed(
             items = document.blocks,
-            key = { _, block -> block.blockId }
+            key = { _, block -> block.blockId },
+            contentType = { _, block -> block::class.java.simpleName }
         ) { index, block ->
             val blockModifier = if (isInteractiveMode && block !is MarkdownBlock.DividerBlock && block !is MarkdownBlock.TableBlock) {
                 Modifier

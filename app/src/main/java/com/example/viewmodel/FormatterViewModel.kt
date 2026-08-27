@@ -77,7 +77,7 @@ fun formatDocument(rawInput: String): FormattedDocument {
     private val _isReadingMode = MutableStateFlow(false)
     val isReadingMode: StateFlow<Boolean> = _isReadingMode.asStateFlow()
 
-    private val _themePreset = MutableStateFlow(ThemePreset.MINIMAL_DARK)
+    private val _themePreset = MutableStateFlow(ThemePreset.AI_STUDIO_DARK)
     val themePreset: StateFlow<ThemePreset> = _themePreset.asStateFlow()
 
     private val _fontSize = MutableStateFlow(FontSizePreference.STANDARD)
