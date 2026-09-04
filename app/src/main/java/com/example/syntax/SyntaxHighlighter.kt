@@ -48,6 +48,7 @@ object SyntaxHighlighter {
         return when {
             lang in listOf("json") -> highlightJson(code, colors)
             lang in listOf("html", "xml", "svg") -> highlightXml(code, colors)
+            lang in listOf("css", "scss", "sass", "less") -> highlightCss(code, colors)
             lang in listOf("sql") -> highlightSql(code, colors)
             lang in listOf("bash", "sh", "zsh", "shell") -> highlightShell(code, colors)
             else -> highlightGeneric(code, colors)
@@ -228,6 +229,60 @@ object SyntaxHighlighter {
             val flagRegex = Regex("(-{1,2}[a-zA-Z0-9_-]+)")
             flagRegex.findAll(text).forEach { match ->
                 addStyle(SpanStyle(color = colors.attribute), match.range.first, match.range.last + 1)
+            }
+        }
+    }
+
+    private fun highlightCss(code: String, colors: CodeSyntaxColors): AnnotatedString {
+        return buildAnnotatedString {
+            append(code)
+            val text = code
+
+            // Comments: /* ... */
+            val commentRegex = Regex("/\\*.*?\\*/", RegexOption.DOT_MATCHES_ALL)
+            commentRegex.findAll(text).forEach { match ->
+                addStyle(SpanStyle(color = colors.comment), match.range.first, match.range.last + 1)
+            }
+
+            // Selectors (lines before {)
+            val selectorRegex = Regex("(?:^|})\\s*([^{]+)\\{", RegexOption.MULTILINE)
+            selectorRegex.findAll(text).forEach { match ->
+                val selectorGroup = match.groups[1]
+                if (selectorGroup != null) {
+                    val selText = selectorGroup.value.trim()
+                    if (!selText.startsWith("/*") && !selText.startsWith("@")) {
+                        addStyle(SpanStyle(color = colors.tag, fontWeight = FontWeight.SemiBold), selectorGroup.range.first, selectorGroup.range.last + 1)
+                    } else if (selText.startsWith("@")) {
+                        addStyle(SpanStyle(color = colors.annotation, fontWeight = FontWeight.Bold), selectorGroup.range.first, selectorGroup.range.last + 1)
+                    }
+                }
+            }
+
+            // Property names: word before colon
+            val propRegex = Regex("([{;\\n]\\s*)([a-zA-Z-]+)\\s*:")
+            propRegex.findAll(text).forEach { match ->
+                val propGroup = match.groups[2]
+                if (propGroup != null) {
+                    addStyle(SpanStyle(color = colors.attribute, fontWeight = FontWeight.Medium), propGroup.range.first, propGroup.range.last + 1)
+                }
+            }
+
+            // Values with hex colors #fff, #123456
+            val hexRegex = Regex("#([0-9a-fA-F]{3,8})\\b")
+            hexRegex.findAll(text).forEach { match ->
+                addStyle(SpanStyle(color = colors.keyword, fontWeight = FontWeight.Bold), match.range.first, match.range.last + 1)
+            }
+
+            // Numbers with units: 12px, 1.5rem, 100%, 0.8em, 24pt
+            val unitRegex = Regex("(?<=:|,|\\s)(-?\\d+(?:\\.\\d+)?(?:px|em|rem|%|vh|vw|pt|s|ms|deg|fr)?)\\b")
+            unitRegex.findAll(text).forEach { match ->
+                addStyle(SpanStyle(color = colors.number), match.range.first, match.range.last + 1)
+            }
+
+            // Strings inside quotes
+            val stringRegex = Regex("(\"[^\"]*\"|'[^']*')")
+            stringRegex.findAll(text).forEach { match ->
+                addStyle(SpanStyle(color = colors.string), match.range.first, match.range.last + 1)
             }
         }
     }

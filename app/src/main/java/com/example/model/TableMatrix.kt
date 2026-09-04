@@ -116,4 +116,42 @@ data class TableMatrix(
 
         return sb.toString().trimEnd()
     }
+
+    fun toHtml(): String {
+        val numCols = columnCount
+        val sb = StringBuilder()
+        sb.append("<table>\n")
+        if (headers.isNotEmpty()) {
+            sb.append("  <thead>\n    <tr>\n")
+            (0 until numCols).forEach { c ->
+                val h = headers.getOrElse(c) { "Col ${c + 1}" }
+                val alignAttr = when (alignments.getOrElse(c) { TableAlignment.LEFT }) {
+                    TableAlignment.CENTER -> " align=\"center\""
+                    TableAlignment.RIGHT -> " align=\"right\""
+                    TableAlignment.LEFT -> ""
+                }
+                sb.append("      <th$alignAttr>$h</th>\n")
+            }
+            sb.append("    </tr>\n  </thead>\n")
+        }
+        if (rows.isNotEmpty()) {
+            sb.append("  <tbody>\n")
+            rows.forEach { row ->
+                sb.append("    <tr>\n")
+                (0 until numCols).forEach { c ->
+                    val cell = row.getOrElse(c) { "" }
+                    val alignAttr = when (alignments.getOrElse(c) { TableAlignment.LEFT }) {
+                        TableAlignment.CENTER -> " align=\"center\""
+                        TableAlignment.RIGHT -> " align=\"right\""
+                        TableAlignment.LEFT -> ""
+                    }
+                    sb.append("      <td$alignAttr>$cell</td>\n")
+                }
+                sb.append("    </tr>\n")
+            }
+            sb.append("  </tbody>\n")
+        }
+        sb.append("</table>")
+        return sb.toString()
+    }
 }

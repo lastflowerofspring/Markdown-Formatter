@@ -75,38 +75,85 @@ fun BlockEditorSheet(
     fun commitChanges(newText: String) {
         val finalMarkdown = when (block) {
             is MarkdownBlock.HeaderBlock -> {
-                "${"#".repeat(block.level)} $newText"
+                if (block.isHtml) "<h${block.level}>$newText</h${block.level}>"
+                else "${"#".repeat(block.level)} $newText"
             }
-            is MarkdownBlock.ParagraphBlock -> newText
+            is MarkdownBlock.ParagraphBlock -> {
+                if (block.isHtml) "<p>$newText</p>"
+                else newText
+            }
             is MarkdownBlock.CodeBlock -> {
-                val fence = "```${block.language}"
-                "$fence\n$newText\n```"
+                if (block.isHtml) {
+                    if (block.language.equals("css", ignoreCase = true)) {
+                        "<style>\n$newText\n</style>"
+                    } else {
+                        val langAttr = if (block.language.isNotEmpty()) " class=\"language-${block.language}\"" else ""
+                        "<pre><code$langAttr>\n$newText\n</code></pre>"
+                    }
+                } else {
+                    val fence = "```${block.language}"
+                    "$fence\n$newText\n```"
+                }
             }
             is MarkdownBlock.CalloutBlock -> {
-                val header = if (block.title != null) "> [!${block.type.name}] ${block.title}" else "> [!${block.type.name}]"
-                val body = newText.lines().joinToString("\n") { "> $it" }
-                "$header\n$body"
+                if (block.isHtml) "<blockquote>\n$newText\n</blockquote>"
+                else {
+                    val header = if (block.title != null) "> [!${block.type.name}] ${block.title}" else "> [!${block.type.name}]"
+                    val body = newText.lines().joinToString("\n") { "> $it" }
+                    "$header\n$body"
+                }
             }
             is MarkdownBlock.MathBlock -> {
                 "$$\n$newText\n$$"
             }
-            is MarkdownBlock.BulletListBlock,
-            is MarkdownBlock.NumberedListBlock,
-            is MarkdownBlock.TaskListBlock -> newText
+            is MarkdownBlock.BulletListBlock -> {
+                if (block.isHtml) {
+                    val items = newText.lines().filter { it.isNotBlank() }.map { line ->
+                        val clean = line.trimStart('-', '*', ' ', '\t')
+                        "  <li>$clean</li>"
+                    }
+                    "<ul>\n${items.joinToString("\n")}\n</ul>"
+                } else newText
+            }
+            is MarkdownBlock.NumberedListBlock -> {
+                if (block.isHtml) {
+                    val items = newText.lines().filter { it.isNotBlank() }.map { line ->
+                        val clean = line.replaceFirst(Regex("^\\s*\\d+[.)]\\s*"), "")
+                        "  <li>$clean</li>"
+                    }
+                    "<ol>\n${items.joinToString("\n")}\n</ol>"
+                } else newText
+            }
+            is MarkdownBlock.TaskListBlock -> {
+                if (block.isHtml) {
+                    val items = newText.lines().filter { it.isNotBlank() }.map { line ->
+                        val isChecked = line.contains("[x]", ignoreCase = true) || line.contains("checked", ignoreCase = true)
+                        val clean = line.replace(Regex("\\[[ xX]\\]"), "").trimStart('-', '*', ' ', '\t')
+                        val checkedAttr = if (isChecked) " checked" else ""
+                        "  <li><input type=\"checkbox\"$checkedAttr> $clean</li>"
+                    }
+                    "<ul>\n${items.joinToString("\n")}\n</ul>"
+                } else newText
+            }
             else -> newText
         }
         onSaveBlockText(finalMarkdown)
     }
 
     val blockTypeLabel = when (block) {
-        is MarkdownBlock.HeaderBlock -> "Heading ${block.level}"
-        is MarkdownBlock.ParagraphBlock -> "Paragraph"
-        is MarkdownBlock.CodeBlock -> "Code (${block.language.ifEmpty { "plain" }})"
-        is MarkdownBlock.CalloutBlock -> "Callout (${block.type.name})"
+        is MarkdownBlock.HeaderBlock -> if (block.isHtml) "HTML Heading ${block.level}" else "Heading ${block.level}"
+        is MarkdownBlock.ParagraphBlock -> if (block.isHtml) "HTML Paragraph" else "Paragraph"
+        is MarkdownBlock.CodeBlock -> {
+            if (block.isHtml) {
+                if (block.language.equals("css", ignoreCase = true)) "CSS Styles"
+                else "HTML Code (${block.language.ifEmpty { "plain" }})"
+            } else "Code (${block.language.ifEmpty { "plain" }})"
+        }
+        is MarkdownBlock.CalloutBlock -> if (block.isHtml) "HTML Blockquote" else "Callout (${block.type.name})"
         is MarkdownBlock.MathBlock -> "Math Formula"
-        is MarkdownBlock.BulletListBlock -> "List Item"
-        is MarkdownBlock.NumberedListBlock -> "Numbered Item"
-        is MarkdownBlock.TaskListBlock -> "Task Item"
+        is MarkdownBlock.BulletListBlock -> if (block.isHtml) "HTML List" else "List Item"
+        is MarkdownBlock.NumberedListBlock -> if (block.isHtml) "HTML Numbered List" else "Numbered Item"
+        is MarkdownBlock.TaskListBlock -> if (block.isHtml) "HTML Task List" else "Task Item"
         else -> "Block"
     }
 

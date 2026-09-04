@@ -56,11 +56,14 @@ fun RenderInlineSpans(
                         val start = length
                         append(span.content)
                         val end = length
+                        val parsedColor = parseHexOrNamedColor(span.colorHex) ?: baseTextColor
+                        val parsedBg = parseHexOrNamedColor(span.bgHex)
                         var style = SpanStyle(
-                            color = baseTextColor,
+                            color = parsedColor,
                             fontSize = bodyFontSize,
                             fontFamily = targetFontFamily,
-                            fontWeight = if (isHeader) FontWeight.SemiBold else FontWeight.Normal
+                            fontWeight = if (isHeader) FontWeight.SemiBold else FontWeight.Normal,
+                            background = parsedBg ?: Color.Unspecified
                         )
                         if (span.isBold) style = style.copy(fontWeight = FontWeight.Bold)
                         if (span.isItalic) style = style.copy(fontStyle = FontStyle.Italic)
@@ -209,5 +212,50 @@ fun RenderInlineSpans(
                 textAlign = textAlign
             )
         )
+    }
+}
+
+private fun parseHexOrNamedColor(colorStr: String?): Color? {
+    if (colorStr.isNullOrBlank()) return null
+    val clean = colorStr.trim().lowercase()
+    return try {
+        when (clean) {
+            "red" -> Color(0xFFE53935)
+            "pink" -> Color(0xFFD81B60)
+            "purple" -> Color(0xFF8E24AA)
+            "deep-purple" -> Color(0xFF5E35B1)
+            "indigo" -> Color(0xFF3949AB)
+            "blue" -> Color(0xFF1E88E5)
+            "light-blue" -> Color(0xFF039BE5)
+            "cyan" -> Color(0xFF00ACC1)
+            "teal" -> Color(0xFF00897B)
+            "green" -> Color(0xFF43A047)
+            "light-green" -> Color(0xFF7CB342)
+            "lime" -> Color(0xFFC0CA33)
+            "yellow" -> Color(0xFFFDD835)
+            "amber" -> Color(0xFFFFB300)
+            "orange" -> Color(0xFFFB8C00)
+            "deep-orange" -> Color(0xFFF4511E)
+            "brown" -> Color(0xFF6D4C41)
+            "gray", "grey" -> Color(0xFF757575)
+            "black" -> Color(0xFF000000)
+            "white" -> Color(0xFFFFFFFF)
+            else -> {
+                val hex = if (clean.startsWith("#")) clean.removePrefix("#") else clean
+                when (hex.length) {
+                    3 -> {
+                        val r = hex[0].toString().repeat(2).toInt(16)
+                        val g = hex[1].toString().repeat(2).toInt(16)
+                        val b = hex[2].toString().repeat(2).toInt(16)
+                        Color(r, g, b)
+                    }
+                    6 -> Color(android.graphics.Color.parseColor("#$hex"))
+                    8 -> Color(android.graphics.Color.parseColor("#$hex"))
+                    else -> null
+                }
+            }
+        }
+    } catch (_: Exception) {
+        null
     }
 }

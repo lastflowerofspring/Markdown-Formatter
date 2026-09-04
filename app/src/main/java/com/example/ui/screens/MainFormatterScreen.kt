@@ -12,9 +12,11 @@ import androidx.compose.animation.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
@@ -41,6 +43,7 @@ import com.example.model.*
 import com.example.ui.components.FindAndReplaceBar
 import com.example.ui.components.MarkdownRenderer
 import com.example.ui.sheets.*
+import com.example.util.PdfExporter
 import com.example.viewmodel.FormatterViewModel
 import com.example.viewmodel.ViewMode
 import kotlinx.coroutines.launch
@@ -210,7 +213,10 @@ fun MainFormatterScreen(
                         val shareIntent = Intent.createChooser(sendIntent, "Share formatted markdown")
                         context.startActivity(shareIntent)
                     },
-                    onSaveSnippet = { showHistorySheet = true }
+                    onSaveSnippet = { showHistorySheet = true },
+                    onExportPdf = {
+                        PdfExporter.printToPdf(context, formattedDoc, rawText, "Formatted_Document")
+                    }
                 )
             }
         }
@@ -277,6 +283,7 @@ fun MainFormatterScreen(
                         onFormatNow = { viewModel.setViewMode(ViewMode.FORMATTED) },
                         onSanitize = { viewModel.sanitizeText() },
                         onFormatTables = { viewModel.formatAllTables() },
+                        onFormatHtmlCss = { viewModel.formatHtmlAndCss() },
                         onReplaceAll = { find, rep, ic -> viewModel.replaceAll(find, rep, ic) }
                     )
                 }
@@ -310,6 +317,7 @@ fun MainFormatterScreen(
                                 onFormatNow = { viewModel.setViewMode(ViewMode.FORMATTED) },
                                 onSanitize = { viewModel.sanitizeText() },
                                 onFormatTables = { viewModel.formatAllTables() },
+                                onFormatHtmlCss = { viewModel.formatHtmlAndCss() },
                                 onReplaceAll = { find, rep, ic -> viewModel.replaceAll(find, rep, ic) }
                             )
                         }
@@ -430,7 +438,7 @@ fun MainFormatterScreen(
             selectedCol = coords.second,
             themeColors = themeColors,
             onSaveMatrix = { updatedMatrix ->
-                val newMarkdown = updatedMatrix.toMarkdown()
+                val newMarkdown = if (tableBlock.isHtml) updatedMatrix.toHtml() else updatedMatrix.toMarkdown()
                 viewModel.updateBlockContent(tableBlock.lineStart, tableBlock.lineEnd, newMarkdown)
                 editingTableMatrixState = Pair(tableBlock, updatedMatrix)
             },
@@ -759,7 +767,8 @@ private fun ReaderBottomMetricsBar(
     onToggleInteractiveMode: () -> Unit,
     onCopyPlain: () -> Unit,
     onShare: () -> Unit,
-    onSaveSnippet: () -> Unit
+    onSaveSnippet: () -> Unit,
+    onExportPdf: () -> Unit
 ) {
     Surface(
         color = themeColors.surface,
@@ -838,6 +847,11 @@ private fun ReaderBottomMetricsBar(
                 IconButton(onClick = onSaveSnippet, modifier = Modifier.size(36.dp).testTag("bottom_bookmark_btn")) {
                     Icon(Icons.Outlined.BookmarkBorder, contentDescription = "Save", tint = themeColors.primary, modifier = Modifier.size(19.dp))
                 }
+
+                // Export PDF / Print
+                IconButton(onClick = onExportPdf, modifier = Modifier.size(36.dp).testTag("bottom_pdf_btn")) {
+                    Icon(Icons.Outlined.PictureAsPdf, contentDescription = "Export PDF", tint = themeColors.secondary, modifier = Modifier.size(19.dp))
+                }
             }
         }
     }
@@ -856,6 +870,7 @@ private fun RawEditorView(
     onFormatNow: () -> Unit,
     onSanitize: () -> Unit,
     onFormatTables: () -> Unit,
+    onFormatHtmlCss: () -> Unit,
     onReplaceAll: (String, String, Boolean) -> Unit,
     isCompact: Boolean = false
 ) {
@@ -1062,9 +1077,11 @@ private fun RawEditorView(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            // Syntax Chips
+            // Syntax Chips (Horizontally Scrollable)
             Row(
-                modifier = Modifier.weight(1f),
+                modifier = Modifier
+                    .weight(1f)
+                    .horizontalScroll(rememberScrollState()),
                 horizontalArrangement = Arrangement.spacedBy(5.dp)
             ) {
                 val helpers = listOf(
@@ -1078,10 +1095,15 @@ private fun RawEditorView(
                     "```" to ("```kotlin\n" to "\n```"),
                     "Quote" to ("> " to ""),
                     "Table" to ("\n| Header 1 | Header 2 |\n| :--- | :--- |\n| Value 1 | Value 2 |\n" to ""),
-                    "Task" to ("- [ ] " to "")
+                    "Task" to ("- [ ] " to ""),
+                    "<p>" to ("<p>" to "</p>"),
+                    "<h1>" to ("<h1>" to "</h1>"),
+                    "<span>" to ("<span style=\"color: #1976d2;\">" to "</span>"),
+                    "<style>" to ("<style>\n" to "\n</style>"),
+                    "<table>" to ("<table>\n  <tr><th>Col 1</th><th>Col 2</th></tr>\n  <tr><td>Val 1</td><td>Val 2</td></tr>\n</table>\n" to "")
                 )
 
-                helpers.take(if (isCompact) 5 else 8).forEach { (label, formatting) ->
+                helpers.forEach { (label, formatting) ->
                     Surface(
                         shape = RoundedCornerShape(6.dp),
                         color = themeColors.surfaceVariant.copy(alpha = 0.7f),
@@ -1152,6 +1174,33 @@ private fun RawEditorView(
                             fontSize = 10.5.sp,
                             fontWeight = FontWeight.Bold,
                             color = themeColors.primary
+                        )
+                    }
+                }
+
+                // HTML / CSS Pretty Formatter
+                val htmlBtnColor = MaterialTheme.colorScheme.tertiary
+                Surface(
+                    shape = RoundedCornerShape(6.dp),
+                    color = htmlBtnColor.copy(alpha = 0.15f),
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(6.dp))
+                        .clickable {
+                            onFormatHtmlCss()
+                            Toast.makeText(context, "Formatted HTML & CSS markup", Toast.LENGTH_SHORT).show()
+                        }
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(3.dp)
+                    ) {
+                        Icon(Icons.Default.Code, contentDescription = null, tint = htmlBtnColor, modifier = Modifier.size(12.dp))
+                        Text(
+                            text = "Format HTML",
+                            fontSize = 10.5.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = htmlBtnColor
                         )
                     }
                 }

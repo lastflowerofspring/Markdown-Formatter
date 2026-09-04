@@ -211,6 +211,96 @@ Where:
 - **Significantly higher parallelizability** during matrix multiplication on GPUs
 - **Direct path length** between long-range tokens reduces gradient degradation
 """.trimIndent()
+        ),
+        SampleContent(
+            title = "HTML & CSS Document",
+            description = "Standard HTML5 tags, embedded CSS style sheets, inline styles & tables",
+            icon = Icons.Default.Code,
+            rawMarkdown = """
+<h1>Executive Project Brief</h1>
+
+<p>This report combines <span style="color: #1976d2; font-weight: bold;">HTML5 standards</span> with <span style="color: #7b1fa2; font-weight: bold;">CSS styling</span> for rapid PDF export and rich document layout.</p>
+
+<style>
+/* Clean report styles */
+.report-header {
+  font-family: sans-serif;
+  color: #1a237e;
+  border-bottom: 2px solid #1a237e;
+  padding-bottom: 8px;
+}
+.metric-card {
+  background-color: #f5f5f5;
+  border-radius: 8px;
+  padding: 16px;
+  margin: 12px 0;
+}
+</style>
+
+<blockquote>
+<strong>Note:</strong> You can edit any HTML block in <em>Interactive Edit Mode</em> or tap <em>Format HTML</em> to beautify markup!
+</blockquote>
+
+<h2>Quarterly Deliverables</h2>
+
+<table>
+  <thead>
+    <tr>
+      <th>Component</th>
+      <th align="center">Framework</th>
+      <th align="right">Status</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Core Parsing Engine</td>
+      <td align="center">Kotlin DSL</td>
+      <td align="right"><span style="color: #2e7d32; font-weight: bold;">Completed</span></td>
+    </tr>
+    <tr>
+      <td>HTML/CSS Renderer</td>
+      <td align="center">Jetpack Compose</td>
+      <td align="right"><span style="color: #2e7d32; font-weight: bold;">Active</span></td>
+    </tr>
+    <tr>
+      <td>Vector PDF Print Exporter</td>
+      <td align="center">Android Print API</td>
+      <td align="right"><span style="color: #1565c0; font-weight: bold;">Ready</span></td>
+    </tr>
+  </tbody>
+</table>
+
+<hr>
+
+<p>Prepared for rapid distribution and printing via standard Android print services.</p>
+""".trimIndent()
+        ),
+        SampleContent(
+            title = "HTML Interactive Checklist",
+            description = "HTML unordered lists with native interactive checkboxes and code",
+            icon = Icons.Default.DataObject,
+            rawMarkdown = """
+<h2>Sprint Launch Checklist</h2>
+
+<p>Tap checkboxes in <strong>Formatted View</strong> to toggle status in real-time:</p>
+
+<ul>
+  <li><input type="checkbox" checked> Validate semantic HTML5 tag hierarchy</li>
+  <li><input type="checkbox" checked> Format CSS style rules with syntax highlighting</li>
+  <li><input type="checkbox"> Test native PDF export with ISO A4 dimensions</li>
+  <li><input type="checkbox"> Verify bi-directional synchronization when editing blocks</li>
+</ul>
+
+<pre><code class="language-css">
+/* Fast print typography rule */
+@media print {
+  body {
+    font-size: 12pt;
+    line-height: 1.5;
+  }
+}
+</code></pre>
+""".trimIndent()
         )
     )
 }

@@ -164,6 +164,11 @@ fun formatDocument(rawInput: String): FormattedDocument {
         updateRawText(formatted)
     }
 
+    fun formatHtmlAndCss() {
+        val formatted = com.example.util.HtmlCssFormatter.formatDocument(_rawText.value)
+        updateRawText(formatted)
+    }
+
     fun replaceAll(findText: String, replaceWith: String, ignoreCase: Boolean = true) {
         if (findText.isEmpty()) return
         val current = _rawText.value
@@ -176,10 +181,18 @@ fun formatDocument(rawInput: String): FormattedDocument {
         val lines = _rawText.value.lines().toMutableList()
         if (lineIndex in lines.indices) {
             val line = lines[lineIndex]
-            val updatedLine = if (isChecked) {
-                line.replaceFirst(Regex("\\[([ ])\\]"), "[x]")
-            } else {
-                line.replaceFirst(Regex("\\[([xX])\\]"), "[ ]")
+            val updatedLine = when {
+                line.contains(Regex("<input[^>]*type=[\"']checkbox[\"']", RegexOption.IGNORE_CASE)) -> {
+                    if (isChecked) {
+                        if (!line.contains("checked", ignoreCase = true)) {
+                            line.replaceFirst(Regex("(<input[^>]*type=[\"']checkbox[\"'])", RegexOption.IGNORE_CASE), "$1 checked")
+                        } else line
+                    } else {
+                        line.replaceFirst(Regex("\\s+checked(=[\"'][^\"']*[\"'])?", RegexOption.IGNORE_CASE), "")
+                    }
+                }
+                isChecked -> line.replaceFirst(Regex("\\[([ ])\\]"), "[x]")
+                else -> line.replaceFirst(Regex("\\[([xX])\\]"), "[ ]")
             }
             lines[lineIndex] = updatedLine
             updateRawText(lines.joinToString("\n"))
