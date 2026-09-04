@@ -42,7 +42,10 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.model.*
 import com.example.ui.components.FindAndReplaceBar
 import com.example.ui.components.MarkdownRenderer
+import com.example.ui.dialogs.CrashReportDialog
 import com.example.ui.sheets.*
+import com.example.util.CrashReport
+import com.example.util.CrashReportManager
 import com.example.util.PdfExporter
 import com.example.viewmodel.FormatterViewModel
 import com.example.viewmodel.ViewMode
@@ -98,6 +101,19 @@ fun MainFormatterScreen(
     var showHistorySheet by remember { mutableStateOf(false) }
     var showSamplesSheet by remember { mutableStateOf(false) }
     var showSearchOverlay by remember { mutableStateOf(false) }
+
+    // Crash Report State & Auto-Detection on App Launch
+    var activeCrashReport by remember { mutableStateOf<CrashReport?>(null) }
+
+    LaunchedEffect(Unit) {
+        if (CrashReportManager.hasPendingCrash()) {
+            activeCrashReport = CrashReportManager.getPendingCrashReport()
+        }
+    }
+
+    LaunchedEffect(rawText, viewMode) {
+        CrashReportManager.updateAppContext(rawText, viewMode.name)
+    }
 
     // Interactive Edit Sheet States
     var editingBlock by remember { mutableStateOf<MarkdownBlock?>(null) }
@@ -501,6 +517,14 @@ fun MainFormatterScreen(
                 viewModel.setViewMode(ViewMode.FORMATTED)
             },
             onDismiss = { showSamplesSheet = false }
+        )
+    }
+
+    // Uncaught Exception / Captured Crash Report Dialog
+    activeCrashReport?.let { report ->
+        CrashReportDialog(
+            report = report,
+            onDismiss = { activeCrashReport = null }
         )
     }
 }

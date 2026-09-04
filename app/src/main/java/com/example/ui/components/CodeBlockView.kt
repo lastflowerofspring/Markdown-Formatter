@@ -192,6 +192,7 @@ fun CodeBlockView(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .height(IntrinsicSize.Min)
                     .padding(vertical = 10.dp)
             ) {
                 // Line Numbers Gutter

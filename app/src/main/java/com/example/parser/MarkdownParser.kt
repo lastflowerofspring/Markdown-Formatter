@@ -17,6 +17,30 @@ object MarkdownParser {
             )
         }
 
+        return try {
+            doParse(rawText)
+        } catch (e: Throwable) {
+            com.example.util.CrashReportManager.recordException(e, "MarkdownParser")
+            val fallbackBlocks = rawText.lines().mapIndexed { idx, line ->
+                MarkdownBlock.ParagraphBlock(
+                    content = InlineSpanGroup(listOf(InlineSpan.Text(line)), line),
+                    blockId = "fallback_$idx",
+                    lineStart = idx,
+                    lineEnd = idx
+                )
+            }
+            FormattedDocument(
+                rawText = rawText,
+                blocks = fallbackBlocks,
+                headings = emptyList(),
+                wordCount = rawText.split(Regex("\\s+")).count { it.isNotBlank() },
+                charCount = rawText.length,
+                readingTimeMinutes = 1
+            )
+        }
+    }
+
+    private fun doParse(rawText: String): FormattedDocument {
         // Break multiple back-to-back block tags across lines so minified HTML parses cleanly
         val normalizedText = rawText
             .replace(Regex("(?i)</div>(?=\\s*<div)"), "</div>\n")

@@ -56,95 +56,112 @@ fun RenderInlineSpans(
                         val start = length
                         append(span.content)
                         val end = length
-                        val parsedColor = parseHexOrNamedColor(span.colorHex) ?: baseTextColor
-                        val parsedBg = parseHexOrNamedColor(span.bgHex)
-                        var style = SpanStyle(
-                            color = parsedColor,
-                            fontSize = bodyFontSize,
-                            fontFamily = targetFontFamily,
-                            fontWeight = if (isHeader) FontWeight.SemiBold else FontWeight.Normal,
-                            background = parsedBg ?: Color.Unspecified
-                        )
-                        if (span.isBold) style = style.copy(fontWeight = FontWeight.Bold)
-                        if (span.isItalic) style = style.copy(fontStyle = FontStyle.Italic)
-                        if (span.isStrike) style = style.copy(textDecoration = TextDecoration.LineThrough)
-                        if (span.isUnderline) style = style.copy(textDecoration = TextDecoration.Underline)
-                        addStyle(style, start, end)
+                        if (start < end) {
+                            val parsedColor = parseHexOrNamedColor(span.colorHex) ?: baseTextColor
+                            val parsedBg = parseHexOrNamedColor(span.bgHex)
+                            var style = SpanStyle(
+                                color = parsedColor,
+                                fontSize = bodyFontSize,
+                                fontFamily = targetFontFamily,
+                                fontWeight = if (isHeader) FontWeight.SemiBold else FontWeight.Normal,
+                                background = parsedBg ?: Color.Unspecified
+                            )
+                            if (span.isBold) style = style.copy(fontWeight = FontWeight.Bold)
+                            if (span.isItalic) style = style.copy(fontStyle = FontStyle.Italic)
+                            if (span.isStrike) style = style.copy(textDecoration = TextDecoration.LineThrough)
+                            if (span.isUnderline) style = style.copy(textDecoration = TextDecoration.Underline)
+                            addStyle(style, start, end)
+                        }
                     }
 
                     is InlineSpan.InlineCode -> {
                         val start = length
                         append(" ${span.code} ")
                         val end = length
-                        addStyle(
-                            SpanStyle(
-                                fontFamily = FontFamily.Monospace,
-                                fontWeight = FontWeight.SemiBold,
-                                fontSize = inlineCodeFontSize,
-                                color = themeColors.inlineCodeText,
-                                background = themeColors.inlineCodeBg
-                            ),
-                            start,
-                            end
-                        )
+                        if (start < end) {
+                            addStyle(
+                                SpanStyle(
+                                    fontFamily = FontFamily.Monospace,
+                                    fontWeight = FontWeight.SemiBold,
+                                    fontSize = inlineCodeFontSize,
+                                    color = themeColors.inlineCodeText,
+                                    background = themeColors.inlineCodeBg
+                                ),
+                                start,
+                                end
+                            )
+                        }
                     }
 
                     is InlineSpan.Link -> {
                         val start = length
                         append(span.text)
                         val end = length
-                        addStyle(
-                            SpanStyle(
-                                color = themeColors.primary,
-                                fontWeight = FontWeight.SemiBold,
-                                textDecoration = TextDecoration.Underline,
-                                fontSize = regularBodyFontSize,
-                                fontFamily = targetFontFamily
-                            ),
-                            start,
-                            end
-                        )
-                        addStringAnnotation(
-                            tag = "URL",
-                            annotation = span.url,
-                            start = start,
-                            end = end
-                        )
+                        if (start < end) {
+                            addStyle(
+                                SpanStyle(
+                                    color = themeColors.primary,
+                                    fontWeight = FontWeight.SemiBold,
+                                    textDecoration = TextDecoration.Underline,
+                                    fontSize = regularBodyFontSize,
+                                    fontFamily = targetFontFamily
+                                ),
+                                start,
+                                end
+                            )
+                            addStringAnnotation(
+                                tag = "URL",
+                                annotation = span.url,
+                                start = start,
+                                end = end
+                            )
+                        }
                     }
 
                     is InlineSpan.InlineMath -> {
                         val start = length
                         append(" ${span.latex} ")
                         val end = length
-                        addStyle(
-                            SpanStyle(
-                                fontFamily = FontFamily.Monospace,
-                                fontStyle = FontStyle.Italic,
-                                color = themeColors.secondary,
-                                fontSize = regularBodyFontSize,
-                                background = themeColors.surfaceVariant.copy(alpha = 0.5f)
-                            ),
-                            start,
-                            end
-                        )
+                        if (start < end) {
+                            addStyle(
+                                SpanStyle(
+                                    fontFamily = FontFamily.Monospace,
+                                    fontStyle = FontStyle.Italic,
+                                    color = themeColors.secondary,
+                                    fontSize = regularBodyFontSize,
+                                    background = themeColors.surfaceVariant.copy(alpha = 0.5f)
+                                ),
+                                start,
+                                end
+                            )
+                        }
                     }
                 }
             }
 
-            // Apply search query highlighting
+            // Apply search query highlighting safely
             if (searchQuery.isNotBlank()) {
-                val text = this.toAnnotatedString().text
-                val matches = Regex(Regex.escape(searchQuery), RegexOption.IGNORE_CASE).findAll(text)
-                matches.forEach { match ->
-                    addStyle(
-                        SpanStyle(
-                            background = Color(0xFFFBBF24),
-                            color = Color(0xFF1E293B),
-                            fontWeight = FontWeight.Bold
-                        ),
-                        match.range.first,
-                        match.range.last + 1
-                    )
+                val fullText = this.toAnnotatedString().text
+                val textLen = fullText.length
+                try {
+                    val matches = Regex(Regex.escape(searchQuery), RegexOption.IGNORE_CASE).findAll(fullText)
+                    matches.forEach { match ->
+                        val start = match.range.first.coerceIn(0, textLen)
+                        val end = (match.range.last + 1).coerceIn(0, textLen)
+                        if (start < end) {
+                            addStyle(
+                                SpanStyle(
+                                    background = Color(0xFFFBBF24),
+                                    color = Color(0xFF1E293B),
+                                    fontWeight = FontWeight.Bold
+                                ),
+                                start,
+                                end
+                            )
+                        }
+                    }
+                } catch (_: Exception) {
+                    // Ignore regex error
                 }
             }
         }
@@ -165,7 +182,10 @@ fun RenderInlineSpans(
                 textAlign = textAlign
             ),
             onClick = { offset ->
-                val urlAnnotation = annotatedString.getStringAnnotations(tag = "URL", start = offset, end = offset).firstOrNull()
+                val urlAnnotation = try {
+                    annotatedString.getStringAnnotations(tag = "URL", start = offset, end = offset).firstOrNull()
+                } catch (_: Exception) { null }
+
                 if (urlAnnotation != null) {
                     val url = urlAnnotation.item
                     try {
@@ -190,7 +210,11 @@ fun RenderInlineSpans(
                 textAlign = textAlign
             ),
             onClick = { offset ->
-                annotatedString.getStringAnnotations(tag = "URL", start = offset, end = offset).firstOrNull()?.let { annotation ->
+                val urlAnnotation = try {
+                    annotatedString.getStringAnnotations(tag = "URL", start = offset, end = offset).firstOrNull()
+                } catch (_: Exception) { null }
+
+                urlAnnotation?.let { annotation ->
                     val url = annotation.item
                     try {
                         val uri = if (!url.startsWith("http://") && !url.startsWith("https://")) "https://$url" else url
@@ -203,7 +227,7 @@ fun RenderInlineSpans(
             }
         )
     } else {
-        // Standard view mode without links: Plain Text that does not intercept/consume parent touches
+        // Standard view mode without links
         Text(
             text = annotatedString,
             modifier = modifier,
@@ -217,7 +241,25 @@ fun RenderInlineSpans(
 
 private fun parseHexOrNamedColor(colorStr: String?): Color? {
     if (colorStr.isNullOrBlank()) return null
-    val clean = colorStr.trim().lowercase()
+    var clean = colorStr.trim().lowercase().removeSuffix(";").removeSurrounding("\"", "\"").removeSurrounding("'", "'").trim()
+    
+    // Support rgb(r, g, b) and rgba(r, g, b, a)
+    if (clean.startsWith("rgb")) {
+        try {
+            val parts = clean.substringAfter("(").substringBefore(")").split(",").map { it.trim() }
+            if (parts.size >= 3) {
+                val r = parts[0].toInt().coerceIn(0, 255)
+                val g = parts[1].toInt().coerceIn(0, 255)
+                val b = parts[2].toInt().coerceIn(0, 255)
+                val a = if (parts.size >= 4) {
+                    val alphaFloat = parts[3].toFloatOrNull() ?: 1f
+                    if (alphaFloat <= 1.0f) (alphaFloat * 255).toInt().coerceIn(0, 255) else parts[3].toInt().coerceIn(0, 255)
+                } else 255
+                return Color(r, g, b, a)
+            }
+        } catch (_: Exception) {}
+    }
+
     return try {
         when (clean) {
             "red" -> Color(0xFFE53935)
