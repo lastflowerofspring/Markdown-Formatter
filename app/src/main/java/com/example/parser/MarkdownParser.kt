@@ -17,7 +17,17 @@ object MarkdownParser {
             )
         }
 
-        val lines = rawText.lines()
+        // Break multiple back-to-back block tags across lines so minified HTML parses cleanly
+        val normalizedText = rawText
+            .replace(Regex("(?i)</div>(?=\\s*<div)"), "</div>\n")
+            .replace(Regex("(?i)</p>(?=\\s*<p)"), "</p>\n")
+            .replace(Regex("(?i)</h1>(?=\\s*<)"), "</h1>\n")
+            .replace(Regex("(?i)</h2>(?=\\s*<)"), "</h2>\n")
+            .replace(Regex("(?i)</h3>(?=\\s*<)"), "</h3>\n")
+            .replace(Regex("(?i)</li>(?=\\s*<li)"), "</li>\n")
+            .replace(Regex("(?i)</tr>(?=\\s*<tr)"), "</tr>\n")
+
+        val lines = normalizedText.lines()
         val blocks = mutableListOf<MarkdownBlock>()
         val headings = mutableListOf<HeadingOutlineItem>()
 
@@ -47,8 +57,10 @@ object MarkdownParser {
             }
 
             // 3. Skip document wrappers (<!DOCTYPE html>, <html>, </html>, <head>, </head>, <body>, </body>)
+            // or orphaned closing tags
             if (trimmed.startsWith("<!DOCTYPE", ignoreCase = true) ||
-                trimmed.matches(Regex("^</?(html|head|body)[^>]*>$", RegexOption.IGNORE_CASE))
+                trimmed.matches(Regex("^</?(html|head|body)[^>]*>$", RegexOption.IGNORE_CASE)) ||
+                trimmed.matches(Regex("^</?(div|p|span|section|article|header|footer|aside|main|font)[^>]*>$", RegexOption.IGNORE_CASE))
             ) {
                 i++
                 continue
@@ -244,24 +256,36 @@ object MarkdownParser {
                 }
             }
 
-            // 11. HTML <p> or <div>
-            if (trimmed.startsWith("<p", ignoreCase = true) || trimmed.startsWith("<div", ignoreCase = true)) {
-                val tagName = if (trimmed.startsWith("<p", ignoreCase = true)) "p" else "div"
+            // 11. HTML <p>, <div>, <section>, <article>, <main>, <header>, <footer>, <aside>, <center>
+            if (trimmed.matches(Regex("^<(?:p|div|section|article|main|header|footer|aside|center)\\b[^>]*>.*$", RegexOption.IGNORE_CASE))) {
+                val tagMatch = Regex("^<([a-zA-Z0-9]+)", RegexOption.IGNORE_CASE).find(trimmed)
+                val tagName = tagMatch?.groupValues?.get(1)?.lowercase() ?: "p"
                 val closeTag = "</$tagName>"
                 val pBuilder = StringBuilder()
+                var endLine = startLine
+
                 while (i < lines.size) {
                     val cur = lines[i]
                     pBuilder.append(cur).append(" ")
+                    endLine = i
                     if (cur.contains(closeTag, ignoreCase = true)) {
                         i++
                         break
+                    }
+                    // Guard against unclosed tag: stop if another distinct block starts
+                    if (i + 1 < lines.size) {
+                        val nextTrim = lines[i + 1].trim()
+                        if (nextTrim.startsWith("#") || nextTrim.startsWith("```") || nextTrim.startsWith("<table") || nextTrim.startsWith("<h")) {
+                            i++
+                            break
+                        }
                     }
                     i++
                 }
                 val fullP = pBuilder.toString().trim()
                 val inner = fullP
                     .replace(Regex("^<${tagName}[^>]*>", RegexOption.IGNORE_CASE), "")
-                    .replace(Regex("</${tagName}>\\s*$", RegexOption.IGNORE_CASE), "")
+                    .replace(Regex("</${tagName}>[\\s\\S]*$", RegexOption.IGNORE_CASE), "")
                     .trim()
                 if (inner.isNotEmpty()) {
                     blocks.add(
@@ -269,7 +293,7 @@ object MarkdownParser {
                             content = parseInlineSpans(inner),
                             blockId = "p_html_${blocks.size}_$startLine",
                             lineStart = startLine,
-                            lineEnd = i - 1,
+                            lineEnd = endLine,
                             isHtml = true
                         )
                     )
@@ -573,41 +597,63 @@ object MarkdownParser {
                 continue
             }
 
-            // 21. Normal Paragraph
+            // 21. Normal Paragraph or HTML inline/block
             val paragraphBuilder = StringBuilder()
             val paragraphStartLine = i
+            var hasHtml = false
+
             while (i < lines.size) {
                 val currentLine = lines[i]
                 val curTrim = currentLine.trim()
-                if (curTrim.isEmpty() ||
-                    curTrim.startsWith("#") ||
-                    curTrim.startsWith("```") ||
-                    curTrim.startsWith("~~~") ||
-                    curTrim.startsWith(">") ||
-                    curTrim.startsWith("$$") ||
-                    curTrim.startsWith("<") ||
-                    curTrim.matches(Regex("^(\\*{3,}|-{3,}|_{3,})$")) ||
-                    curTrim.matches(Regex("^[-*+]\\s+.*$")) ||
-                    curTrim.matches(Regex("^\\d+[.)]\\s+.*$")) ||
-                    (curTrim.startsWith("|") && curTrim.endsWith("|") && i + 1 < lines.size && lines[i + 1].trim().matches(Regex("^\\|[\\s:|-]+\\|$")))
-                ) {
-                    break
+
+                // Only check breaking condition after consuming at least one line
+                if (i > paragraphStartLine) {
+                    if (curTrim.isEmpty() ||
+                        curTrim.startsWith("#") ||
+                        curTrim.startsWith("```") ||
+                        curTrim.startsWith("~~~") ||
+                        curTrim.startsWith(">") ||
+                        curTrim.startsWith("$$") ||
+                        curTrim.startsWith("<style", ignoreCase = true) ||
+                        curTrim.startsWith("<pre", ignoreCase = true) ||
+                        curTrim.startsWith("<table", ignoreCase = true) ||
+                        curTrim.startsWith("<ul", ignoreCase = true) ||
+                        curTrim.startsWith("<ol", ignoreCase = true) ||
+                        curTrim.startsWith("<blockquote", ignoreCase = true) ||
+                        curTrim.matches(Regex("^<h[1-6]\\b", RegexOption.IGNORE_CASE)) ||
+                        curTrim.matches(Regex("^<(?:p|div|section|article|main|header|footer|aside|center)\\b", RegexOption.IGNORE_CASE)) ||
+                        curTrim.startsWith("<hr", ignoreCase = true) ||
+                        curTrim.matches(Regex("^(\\*{3,}|-{3,}|_{3,})$")) ||
+                        curTrim.matches(Regex("^[-*+]\\s+.*$")) ||
+                        curTrim.matches(Regex("^\\d+[.)]\\s+.*$")) ||
+                        (curTrim.startsWith("|") && curTrim.endsWith("|") && i + 1 < lines.size && lines[i + 1].trim().matches(Regex("^\\|[\\s:|-]+\\|$")))
+                    ) {
+                        break
+                    }
                 }
+
+                if (curTrim.contains("<")) hasHtml = true
                 if (paragraphBuilder.isNotEmpty()) paragraphBuilder.append(" ")
                 paragraphBuilder.append(curTrim)
                 i++
             }
 
-            val pText = paragraphBuilder.toString()
+            val pText = paragraphBuilder.toString().trim()
             if (pText.isNotEmpty()) {
                 blocks.add(
                     MarkdownBlock.ParagraphBlock(
                         content = parseInlineSpans(pText),
                         blockId = "p_${blocks.size}_$paragraphStartLine",
                         lineStart = paragraphStartLine,
-                        lineEnd = i - 1
+                        lineEnd = (i - 1).coerceAtLeast(paragraphStartLine),
+                        isHtml = hasHtml
                     )
                 )
+            }
+
+            // Inviolable guarantee: i must always advance
+            if (i == startLine) {
+                i++
             }
         }
 
@@ -785,94 +831,145 @@ object MarkdownParser {
     }
 
     fun parseInlineSpans(text: String): InlineSpanGroup {
+        if (text.isEmpty()) return InlineSpanGroup(emptyList(), "")
         val spans = mutableListOf<InlineSpan>()
-        // Combines Markdown and HTML inline tokens
+
+        // Combines Markdown and HTML inline tokens without catastrophic backtracking
         val pattern = Regex(
-            "(`[^`]+`|\\[[^\\]]+\\]\\([^)]+\\)|\\$\\$?[^$]+\\$\\$?|\\*\\*\\*[^*]+\\*\\*\\*|\\*\\*[^*]+\\*\\*|\\*[^*]+\\*|~~[^~]+~~|__[^_]+__|_[^_]+_" +
-            "|<span\\s+[^>]*style=[\"']([^\"']*)[\"'][^>]*>([\\s\\S]*?)</span>" +
-            "|<a\\s+[^>]*href=[\"']([^\"']*)[\"'][^>]*>([\\s\\S]*?)</a>" +
-            "|<(b|strong)>([\\s\\S]*?)</\\7>" +
-            "|<(i|em)>([\\s\\S]*?)</\\9>" +
-            "|<(u|ins)>([\\s\\S]*?)</\\11>" +
-            "|<(s|del|strike)>([\\s\\S]*?)</\\13>" +
-            "|<code>([\\s\\S]*?)</code>" +
-            "|<mark>([\\s\\S]*?)</mark>" +
-            "|<br\\s*/?>)"
+            "(`[^`\n]+`" +
+            "|\\[[^\\]\n]+\\]\\([^)\n]+\\)" +
+            "|\\$\\$?[^$\n]+\\$\\$?" +
+            "|\\*\\*\\*[^*\n]+\\*\\*\\*" +
+            "|___[^_\n]+___" +
+            "|\\*\\*[^*\n]+\\*\\*" +
+            "|__[^_\n]+__" +
+            "|~~[^~\n]+~~" +
+            "|\\*[^*\n]+\\*" +
+            "|_[^_\n]+_" +
+            "|<span\\b[^>]*>.*?</span>" +
+            "|<a\\b[^>]*>.*?</a>" +
+            "|<(?:strong|b)\\b[^>]*>.*?</(?:strong|b)>" +
+            "|<(?:em|i)\\b[^>]*>.*?</(?:em|i)>" +
+            "|<(?:u|ins)\\b[^>]*>.*?</(?:u|ins)>" +
+            "|<(?:s|del|strike)\\b[^>]*>.*?</(?:s|del|strike)>" +
+            "|<code\\b[^>]*>.*?</code>" +
+            "|<mark\\b[^>]*>.*?</mark>" +
+            "|<br\\s*/?>" +
+            "|<[^>]+>)",
+            setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL)
         )
 
         var currentIndex = 0
         pattern.findAll(text).forEach { match ->
             if (match.range.first > currentIndex) {
                 val plain = text.substring(currentIndex, match.range.first)
-                spans.add(InlineSpan.Text(content = unescapeHtml(plain)))
+                val cleanPlain = unescapeHtml(plain)
+                if (cleanPlain.isNotEmpty()) {
+                    spans.add(InlineSpan.Text(content = cleanPlain))
+                }
             }
 
             val token = match.value
             when {
                 // HTML <span style="...">
                 token.startsWith("<span", ignoreCase = true) -> {
-                    val styleVal = match.groupValues[2]
-                    val inner = match.groupValues[3]
+                    val styleVal = Regex("style=[\"']([^\"']*)[\"']", RegexOption.IGNORE_CASE).find(token)?.groupValues?.get(1) ?: ""
+                    val inner = token
+                        .replace(Regex("^<span[^>]*>", RegexOption.IGNORE_CASE), "")
+                        .replace(Regex("</span>$", RegexOption.IGNORE_CASE), "")
                     val color = extractStyleProperty(styleVal, "color")
                     val bg = extractStyleProperty(styleVal, "background-color") ?: extractStyleProperty(styleVal, "background")
                     val isBold = styleVal.contains("font-weight\\s*:\\s*bold".toRegex(RegexOption.IGNORE_CASE))
                     val isItalic = styleVal.contains("font-style\\s*:\\s*italic".toRegex(RegexOption.IGNORE_CASE))
                     val isUnderline = styleVal.contains("text-decoration\\s*:\\s*underline".toRegex(RegexOption.IGNORE_CASE))
                     val isStrike = styleVal.contains("text-decoration\\s*:\\s*line-through".toRegex(RegexOption.IGNORE_CASE))
-                    spans.add(
-                        InlineSpan.Text(
-                            content = unescapeHtml(inner),
-                            isBold = isBold,
-                            isItalic = isItalic,
-                            isUnderline = isUnderline,
-                            isStrike = isStrike,
-                            colorHex = color,
-                            bgHex = bg
+                    val cleanInner = unescapeHtml(inner.replace(Regex("<[^>]+>"), ""))
+                    if (cleanInner.isNotEmpty()) {
+                        spans.add(
+                            InlineSpan.Text(
+                                content = cleanInner,
+                                isBold = isBold,
+                                isItalic = isItalic,
+                                isUnderline = isUnderline,
+                                isStrike = isStrike,
+                                colorHex = color,
+                                bgHex = bg
+                            )
                         )
-                    )
+                    }
                 }
 
                 // HTML <a href="...">
                 token.startsWith("<a", ignoreCase = true) -> {
-                    val href = match.groupValues[4]
-                    val linkText = match.groupValues[5]
-                    spans.add(InlineSpan.Link(text = unescapeHtml(linkText), url = href))
+                    val href = Regex("href=[\"']([^\"']*)[\"']", RegexOption.IGNORE_CASE).find(token)?.groupValues?.get(1) ?: ""
+                    val inner = token
+                        .replace(Regex("^<a[^>]*>", RegexOption.IGNORE_CASE), "")
+                        .replace(Regex("</a>$", RegexOption.IGNORE_CASE), "")
+                    val cleanInner = unescapeHtml(inner.replace(Regex("<[^>]+>"), ""))
+                    spans.add(InlineSpan.Link(text = cleanInner, url = href))
                 }
 
                 // HTML <b> or <strong>
                 token.startsWith("<b", ignoreCase = true) || token.startsWith("<strong", ignoreCase = true) -> {
-                    val inner = match.groupValues[8]
-                    spans.add(InlineSpan.Text(content = unescapeHtml(inner), isBold = true))
+                    val inner = token
+                        .replace(Regex("^<(?:strong|b)[^>]*>", RegexOption.IGNORE_CASE), "")
+                        .replace(Regex("</(?:strong|b)>$", RegexOption.IGNORE_CASE), "")
+                    val cleanInner = unescapeHtml(inner.replace(Regex("<[^>]+>"), ""))
+                    if (cleanInner.isNotEmpty()) {
+                        spans.add(InlineSpan.Text(content = cleanInner, isBold = true))
+                    }
                 }
 
                 // HTML <i> or <em>
                 token.startsWith("<i", ignoreCase = true) || token.startsWith("<em", ignoreCase = true) -> {
-                    val inner = match.groupValues[10]
-                    spans.add(InlineSpan.Text(content = unescapeHtml(inner), isItalic = true))
+                    val inner = token
+                        .replace(Regex("^<(?:em|i)[^>]*>", RegexOption.IGNORE_CASE), "")
+                        .replace(Regex("</(?:em|i)>$", RegexOption.IGNORE_CASE), "")
+                    val cleanInner = unescapeHtml(inner.replace(Regex("<[^>]+>"), ""))
+                    if (cleanInner.isNotEmpty()) {
+                        spans.add(InlineSpan.Text(content = cleanInner, isItalic = true))
+                    }
                 }
 
                 // HTML <u> or <ins>
                 token.startsWith("<u", ignoreCase = true) || token.startsWith("<ins", ignoreCase = true) -> {
-                    val inner = match.groupValues[12]
-                    spans.add(InlineSpan.Text(content = unescapeHtml(inner), isUnderline = true))
+                    val inner = token
+                        .replace(Regex("^<(?:u|ins)[^>]*>", RegexOption.IGNORE_CASE), "")
+                        .replace(Regex("</(?:u|ins)>$", RegexOption.IGNORE_CASE), "")
+                    val cleanInner = unescapeHtml(inner.replace(Regex("<[^>]+>"), ""))
+                    if (cleanInner.isNotEmpty()) {
+                        spans.add(InlineSpan.Text(content = cleanInner, isUnderline = true))
+                    }
                 }
 
                 // HTML <s> or <del> or <strike>
                 token.startsWith("<s", ignoreCase = true) || token.startsWith("<del", ignoreCase = true) || token.startsWith("<strike", ignoreCase = true) -> {
-                    val inner = match.groupValues[14]
-                    spans.add(InlineSpan.Text(content = unescapeHtml(inner), isStrike = true))
+                    val inner = token
+                        .replace(Regex("^<(?:s|del|strike)[^>]*>", RegexOption.IGNORE_CASE), "")
+                        .replace(Regex("</(?:s|del|strike)>$", RegexOption.IGNORE_CASE), "")
+                    val cleanInner = unescapeHtml(inner.replace(Regex("<[^>]+>"), ""))
+                    if (cleanInner.isNotEmpty()) {
+                        spans.add(InlineSpan.Text(content = cleanInner, isStrike = true))
+                    }
                 }
 
                 // HTML <code>
                 token.startsWith("<code", ignoreCase = true) -> {
-                    val inner = match.groupValues[15]
-                    spans.add(InlineSpan.InlineCode(code = unescapeHtml(inner)))
+                    val inner = token
+                        .replace(Regex("^<code[^>]*>", RegexOption.IGNORE_CASE), "")
+                        .replace(Regex("</code>$", RegexOption.IGNORE_CASE), "")
+                    spans.add(InlineSpan.InlineCode(code = unescapeHtml(inner.replace(Regex("<[^>]+>"), ""))))
                 }
 
                 // HTML <mark>
                 token.startsWith("<mark", ignoreCase = true) -> {
-                    val inner = match.groupValues[16]
-                    spans.add(InlineSpan.Text(content = unescapeHtml(inner), bgHex = "#fef08a"))
+                    val inner = token
+                        .replace(Regex("^<mark[^>]*>", RegexOption.IGNORE_CASE), "")
+                        .replace(Regex("</mark>$", RegexOption.IGNORE_CASE), "")
+                    val cleanInner = unescapeHtml(inner.replace(Regex("<[^>]+>"), ""))
+                    if (cleanInner.isNotEmpty()) {
+                        spans.add(InlineSpan.Text(content = cleanInner, bgHex = "#fef08a"))
+                    }
                 }
 
                 // HTML <br>
@@ -921,8 +1018,16 @@ object MarkdownParser {
                     spans.add(InlineSpan.Text(content = inner, isItalic = true))
                 }
 
+                // Any other HTML tag: cleanly strip it (e.g. stray <div>, </div>, <font>, etc.)
+                token.startsWith("<") && token.endsWith(">") -> {
+                    // Stripped from visual output
+                }
+
                 else -> {
-                    spans.add(InlineSpan.Text(content = unescapeHtml(token)))
+                    val clean = unescapeHtml(token)
+                    if (clean.isNotEmpty()) {
+                        spans.add(InlineSpan.Text(content = clean))
+                    }
                 }
             }
             currentIndex = match.range.last + 1
@@ -930,7 +1035,10 @@ object MarkdownParser {
 
         if (currentIndex < text.length) {
             val remaining = text.substring(currentIndex)
-            spans.add(InlineSpan.Text(content = unescapeHtml(remaining)))
+            val cleanRemaining = unescapeHtml(remaining)
+            if (cleanRemaining.isNotEmpty()) {
+                spans.add(InlineSpan.Text(content = cleanRemaining))
+            }
         }
 
         return InlineSpanGroup(spans = spans, rawText = text)

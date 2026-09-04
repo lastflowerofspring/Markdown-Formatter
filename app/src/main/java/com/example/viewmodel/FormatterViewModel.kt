@@ -95,9 +95,12 @@ fun formatDocument(rawInput: String): FormattedDocument {
     val snippets: StateFlow<List<SnippetEntity>> = snippetDao.getAllSnippets()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    private var parseJob: kotlinx.coroutines.Job? = null
+
     fun updateRawText(newText: String) {
         _rawText.value = newText
-        viewModelScope.launch(Dispatchers.Default) {
+        parseJob?.cancel()
+        parseJob = viewModelScope.launch(Dispatchers.Default) {
             val parsed = MarkdownParser.parse(newText)
             _formattedDoc.value = parsed
         }

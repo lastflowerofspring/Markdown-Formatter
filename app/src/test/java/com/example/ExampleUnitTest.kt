@@ -54,7 +54,7 @@ class ExampleUnitTest {
     assertNotNull("Should parse html table", table)
     assertTrue(table?.isHtml == true)
     assertEquals(2, table?.headers?.size)
-    assertEquals("Header A", table?.headers?.get(0))
+    assertEquals("Header A", table?.headers?.get(0)?.rawText)
   }
 
   @Test
@@ -63,5 +63,49 @@ class ExampleUnitTest {
     val formatted = HtmlCssFormatter.formatDocument(messy)
     assertTrue(formatted.contains("\n"))
     assertTrue(formatted.contains("color: red;"))
+  }
+
+  @Test
+  fun testBengaliHtmlParsing() {
+    val text = """
+      ৬ মাস ৪ দিন।</strong></div>
+      <div>১৩. হযরত উসমান (রা.)-এর জীবনের শ্রেষ্ঠ অমর কীর্তি কোনটি? — <strong>কুরআন মাজীদের প্রমিত পাণ্ডুলিপি তৈরি ও বিশ্বব্যাপী প্রচার</strong></div>
+      <div>১৪. অপর মুসলিমদের জানমাল ও ইজ্জতের নিরাপত্তা দেওয়া — <strong>মুমিনের প্রধান দায়িত্ব</strong></div>
+    """.trimIndent()
+    val doc = MarkdownParser.parse(text)
+    assertTrue("Should parse into blocks", doc.blocks.isNotEmpty())
+    assertEquals(3, doc.blocks.size)
+    val secondBlock = doc.blocks[1] as MarkdownBlock.ParagraphBlock
+    val boldSpan = secondBlock.content.spans.filterIsInstance<com.example.model.InlineSpan.Text>().find { it.isBold }
+    assertNotNull("Should contain bold span", boldSpan)
+    assertTrue(boldSpan!!.content.contains("কুরআন মাজীদের প্রমিত পাণ্ডুলিপি তৈরি"))
+  }
+
+  @Test
+  fun testLargeHtmlInputParsing() {
+    val sb = StringBuilder()
+    for (i in 1..2000) {
+      sb.append("<div>Item $i — <strong>Answer $i</strong> with <span style=\"color: #00ff00;\">green info</span></div>\n")
+    }
+    val startTime = System.currentTimeMillis()
+    val doc = MarkdownParser.parse(sb.toString())
+    val elapsed = System.currentTimeMillis() - startTime
+    println("Parsed 2000 HTML items in $elapsed ms")
+    assertTrue("Parsing 2000 items should take less than 2000ms", elapsed < 2000)
+    assertEquals(2000, doc.blocks.size)
+  }
+
+  @Test
+  fun testOrphanedTagsAndUnclosedBlocks() {
+    val text = """
+      </div>
+      </p>
+      <span>test</span>
+      <div>Unclosed div without ending
+      # Heading after unclosed div
+      More text
+    """.trimIndent()
+    val doc = MarkdownParser.parse(text)
+    assertTrue("Should handle orphaned and unclosed tags without infinite loop", doc.blocks.isNotEmpty())
   }
 }
